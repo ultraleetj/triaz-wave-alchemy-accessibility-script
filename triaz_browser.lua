@@ -480,17 +480,20 @@ local preview_source = nil
 
 local function stop_preview()
   if not preview_source then return end
-  reaper.CF_Preview_Stop(preview_source)
-  reaper.CF_Preview_Destroy(preview_source)
+  if reaper.CF_Preview_Stop   then reaper.CF_Preview_Stop(preview_source)   end
+  if reaper.CF_Preview_Destroy then reaper.CF_Preview_Destroy(preview_source) end
   preview_source = nil
 end
 
 local function preview_wav(path)
+  if not reaper.CF_Preview_CreateFromFile then return end
   stop_preview()
   local src = reaper.CF_Preview_CreateFromFile(path)
   if not src then return end
-  reaper.CF_Preview_SetValue(src, "D_VOLUME", 1.0)
-  reaper.CF_Preview_SetValue(src, "B_LOOP",   0.0)
+  if reaper.CF_Preview_SetValue then
+    reaper.CF_Preview_SetValue(src, "D_VOLUME", 1.0)
+    reaper.CF_Preview_SetValue(src, "B_LOOP",   0.0)
+  end
   reaper.CF_Preview_Play(src)
   preview_source = src
 end
