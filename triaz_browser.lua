@@ -463,124 +463,26 @@ local function configure_rs5k(track, fx_idx, params)
 end
 
 -- ── Preview ──────────────────────────────────────────────────────────────────
--- Cascade: SWS CF_Preview → REAPER PlayPreview → CF_ShellExecute → os.execute
--- Each tried with pcall so a missing function never crashes.
 
 local preview_source = nil
 
 local function stop_preview()
   if not preview_source then return end
-  if preview_source == "shell" then
-    preview_source = nil; return
-  end
-  -- SWS CF_Preview
-  pcall(function()
-    if reaper.CF_Preview_Stop    then reaper.CF_Preview_Stop(preview_source)    end
-    if reaper.CF_Preview_Destroy then reaper.CF_Preview_Destroy(preview_source) end
-  end)
-  -- Built-in (PCM_source)
-  pcall(function()
-    if reaper.StopPreview       then reaper.StopPreview(preview_source)        end
-    if reaper.PCM_Source_Destroy then reaper.PCM_Source_Destroy(preview_source) end
-  end)
+  reaper.CF_Preview_Stop(preview_source)
+  reaper.CF_Preview_Destroy(preview_source)
   preview_source = nil
 end
 
 local function preview_wav(path)
   stop_preview()
-
-  -- Normalize path: SWS CF_Preview may require forward slashes
-  local fwd_path = path:gsub("\\", "/")
-
-  -- 1a. SWS CF_Preview with forward-slash path
-  local ok1, src1 = pcall(reaper.CF_Preview_CreateFromFile, fwd_path)
-  if not (ok1 and src1) then
-    -- 1b. Retry with original backslash path
-    ok1, src1 = pcall(reaper.CF_Preview_CreateFromFile, path)
-  end
-
-  if ok1 and src1 then
-    -- Route to master output explicitly before play
-    pcall(function()
-      if reaper.CF_Preview_SetOutputTrack then
-        reaper.CF_Preview_SetOutputTrack(src1, 0, nil)  -- 0=project, nil=master
-      end
-      if reaper.CF_Preview_SetValue then
-        reaper.CF_Preview_SetValue(src1, "D_VOLUME", 1.0)
-        reaper.CF_Preview_SetValue(src1, "B_LOOP", 0.0)
-      end
-    end)
-    local play_ok, play_err = pcall(reaper.CF_Preview_Play, src1)
-    if play_ok then
-      preview_source = src1
-      return
-    end
-    local dbg = "CF_Preview_Play failed: " .. tostring(play_err)
-      .. "\npath: " .. path
-      .. "\nfwd:  " .. fwd_path
-      .. "\nCF_Preview_CreateFromFile: " .. type(reaper.CF_Preview_CreateFromFile)
-      .. "\nCF_Preview_Play: " .. type(reaper.CF_Preview_Play)
-    if reaper.CF_SetClipboard then reaper.CF_SetClipboard(dbg) end
-    reaper.MB(dbg, "Preview debug (copied to clipboard)", 0)
-    pcall(reaper.CF_Preview_Destroy, src1)
-  else
-    local dbg = "CF_Preview_CreateFromFile returned nil"
-      .. "\nok=" .. tostring(ok1) .. " src=" .. tostring(src1)
-      .. "\npath: " .. path
-      .. "\nfwd:  " .. fwd_path
-      .. "\nFunction type: " .. type(reaper.CF_Preview_CreateFromFile)
-    if reaper.CF_SetClipboard then reaper.CF_SetClipboard(dbg) end
-    reaper.MB(dbg, "Preview debug (copied to clipboard)", 0)
-  end
-
-  -- 2. REAPER built-in PlayTrackPreview (different routing from PlayPreview)
-  local ok2, src2 = pcall(reaper.PCM_Source_CreateFromFile, path)
-  if ok2 and src2 then
-    local play_ok = pcall(reaper.PlayTrackPreview, src2)
-    if play_ok then preview_source = src2; return end
-    local play_ok2 = pcall(reaper.PlayPreview, src2)
-    if play_ok2 then preview_source = src2; return end
-    pcall(reaper.PCM_Source_Destroy, src2)
-  end
-
-  -- 3. SWS shell execute (opens in system default player)
-  if reaper.CF_ShellExecute then
-    reaper.CF_ShellExecute(path)
-    preview_source = "shell"; return
-  end
-
-  -- 4. Windows shell fallback
-  os.execute('start "" "' .. path:gsub('"', '\\"') .. '"')
-  preview_source = "shell"
+  local src = reaper.CF_Preview_CreateFromFile(path)
+  if not src then return end
+  reaper.CF_Preview_SetValue(src, "D_VOLUME", 1.0)
+  reaper.CF_Preview_SetValue(src, "B_LOOP",   0.0)
+  reaper.CF_Preview_Play(src)
+  preview_source = src
 end
 
-local function preview_via_rs5k(track, note)
-  -- Insert a tiny temp MIDI item, play it, then delete — no arming needed.
-  local cursor = reaper.GetCursorPosition()
-  local dur    = 1.0  -- seconds
-
-  local item = reaper.CreateNewMIDIItemInProj(track, cursor, cursor + dur, false)
-  if not item then return end
-
-  local take = reaper.GetActiveTake(item)
-  if take then
-    -- 480 PPQ note, full duration
-    reaper.MIDI_InsertNote(take, false, false, 0, 479, 0, note, 100, false)
-    reaper.MIDI_Sort(take)
-  end
-
-  reaper.SetEditCurPos(cursor, false, false)
-  reaper.Main_OnCommand(1007, 0)  -- play
-
-  -- Stop and delete item after dur + small buffer
-  reaper.defer(function()
-    reaper.defer(function()
-      reaper.Main_OnCommand(1016, 0)  -- stop
-      reaper.DeleteTrackMediaItem(track, item)
-      reaper.SetEditCurPos(cursor, false, false)
-    end)
-  end)
-end
 
 -- ── Dialog helpers ───────────────────────────────────────────────────────────
 
@@ -921,8 +823,7 @@ local function tweak_mode(track)
     "Swap sample (re-browse)",
     "Edit volume / pan",
     "Edit pitch semitones",
-    "Preview current sample (CF_Preview)",
-    "Preview via RS5k (MIDI trigger)",
+    "Preview current sample",
     "Dump RS5k params (diagnostic)",
     "Remove this instance",
   }
@@ -975,13 +876,9 @@ local function tweak_mode(track)
     end
 
   elseif action == 5 then
-    preview_via_rs5k(track, info.note)
-    reaper.MB("MIDI trigger sent on note " .. note_name(info.note), "Preview", 0)
-
-  elseif action == 6 then
     dump_rs5k_params(track, fx_idx)
 
-  elseif action == 7 then
+  elseif action == 6 then
     if ask_yes_no("Remove this RS5k instance?", "Confirm Remove") then
       delete_meta(track, fx_idx)
       reaper.TrackFX_Delete(track, fx_idx)
@@ -993,7 +890,6 @@ end
 -- ── Add new assignment flow ───────────────────────────────────────────────────
 
 local function add_assignment_flow(track)
-  -- 1. Native file dialog: one step, fully accessible
   local wav_name, full_path, drum_type, tag = browse_sample()
   if not wav_name then stop_preview(); return end
 
@@ -1070,8 +966,7 @@ local function add_assignment_flow(track)
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pan, (pan_pct / 200.0) + 0.5)
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(pitch_st))
 
-    -- Trigger MIDI preview through RS5k
-    preview_via_rs5k(track, target_note)
+    preview_wav(full_path)
 
     -- Keep / try another / cancel
     -- MB type 3 = Yes / No / Cancel
@@ -1207,7 +1102,7 @@ local function quick_assign_flow(track)
   reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pan, 0.5)
   reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(0))
 
-  preview_via_rs5k(track, note)
+  preview_wav(full_path)
   local keep = reaper.MB(
     string.format("%s / %s / %s\nNote: %s  L%d\n\nYes = keep   No = discard",
       drum_type, tag, wav_name, note_name(note), layer),
