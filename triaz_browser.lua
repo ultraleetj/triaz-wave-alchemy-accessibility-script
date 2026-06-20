@@ -489,6 +489,9 @@ local function preview_wav(path)
   if not reaper.CF_Preview_CreateFromFile then return end
   stop_preview()
   local src = reaper.CF_Preview_CreateFromFile(path)
+  if not src then
+    src = reaper.CF_Preview_CreateFromFile(path:gsub("\\", "/"))
+  end
   if not src then return end
   if reaper.CF_Preview_SetValue then
     reaper.CF_Preview_SetValue(src, "D_VOLUME", 1.0)
