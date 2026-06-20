@@ -200,5 +200,9 @@ All other drum types verified clean — no embedded loops.
 
 ## TODO
 
-### Active
-- Full end-to-end test of all flows after RS5k param + preview fixes
+### Future
+- **Randomize feature** — two modes:
+  1. Randomize already-assigned voices: for each RS5k on the track, pick a random WAV from the same drum type + tag (or sibling cluster) and reassign
+  2. Random kit from scratch: pick random drum type/tag/WAV for each GM voice, assign to standard notes (36=kick, 38=snare, 42=hh_c, etc.)
+  - Could offer: same type only / same tag cluster / full random
+  - Seed option for reproducibility
