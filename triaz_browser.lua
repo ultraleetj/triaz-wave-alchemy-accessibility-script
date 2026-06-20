@@ -1094,21 +1094,120 @@ local function quick_assign_flow(track)
   end
   local layer = math.max(1, math.min(3, tonumber(parts[2]) or 1))
 
-  local assign_ok, fx_idx = assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, nil)
-  if not assign_ok then return end
+  while true do
+    local assign_ok, fx_idx = assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, nil)
+    if not assign_ok then return end
 
-  -- defaults: unity vol, center pan, no pitch shift
-  reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.volume, 0.8)
-  reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pan, 0.5)
-  reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(0))
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.volume, 0.8)
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pan, 0.5)
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(0))
 
-  preview_wav(full_path)
-  local keep = reaper.MB(
-    string.format("%s / %s / %s\nNote: %s  L%d\n\nYes = keep   No = discard",
-      drum_type, tag, wav_name, note_name(note), layer),
-    "Keep?", 4
+    preview_wav(full_path)
+    -- MB type 3 = Yes / No / Cancel
+    local res = reaper.MB(
+      string.format("%s / %s / %s\nNote: %s  L%d\n\nYes = keep   No = browse again   Cancel = discard",
+        drum_type, tag, wav_name, note_name(note), layer),
+      "Keep?", 3
+    )
+    stop_preview()
+
+    if res == 6 then return end  -- Yes: keep
+
+    delete_meta(track, fx_idx)
+    reaper.TrackFX_Delete(track, fx_idx)
+
+    if res == 7 then  -- No: browse again
+      local new_wav, new_path, new_type, new_tag = browse_sample()
+      if not new_wav then return end
+      wav_name, full_path, drum_type, tag = new_wav, new_path, new_type, new_tag
+    else  -- Cancel: discard
+      return
+    end
+  end
+end
+
+-- ── Import selected items ─────────────────────────────────────────────────────
+-- For each selected media item on the timeline, ask note+layer, assign to RS5k.
+
+local function import_selected_items_flow(track)
+  local count = reaper.CountSelectedMediaItems(0)
+  if count == 0 then
+    reaper.MB("No media items selected in project.", "Import", 0)
+    return
+  end
+
+  local items = {}
+  for i = 0, count - 1 do
+    local item = reaper.GetSelectedMediaItem(0, i)
+    local take  = item and reaper.GetActiveTake(item)
+    if take and not reaper.TakeIsMIDI(take) then
+      local src  = reaper.GetMediaItemTake_Source(take)
+      local path = src and reaper.GetMediaSourceFileName(src, "")
+      if path and path ~= "" then
+        items[#items + 1] = path
+      end
+    end
+  end
+
+  if #items == 0 then
+    reaper.MB("No audio items found in selection (MIDI items ignored).", "Import", 0)
+    return
+  end
+
+  reaper.MB(
+    string.format("%d audio item%s found.\nFor each: set note + layer, preview, keep or skip.",
+      #items, #items == 1 and "" or "s"),
+    "Import Selected Items", 0
   )
-  if keep ~= 6 then reaper.TrackFX_Delete(track, fx_idx) end
+
+  for idx, full_path in ipairs(items) do
+    stop_preview()  -- ensure previous item's audio is dead before next dialog
+
+    local wav_name = full_path:match("[^\\/]+$") or full_path
+    local drum_type, tag = parse_triaz_path(full_path)
+    drum_type = drum_type or "Unknown"
+    tag       = tag       or ""
+
+    local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
+    local ok, result = reaper.GetUserInputs(
+      string.format("Item %d/%d: %s", idx, #items, wav_name), 2,
+      "MIDI note (0-127 or name; suggested=" .. gm_note .. "),Layer (1-3)",
+      gm_note .. ",1"
+    )
+    if not ok then break end
+
+    local parts = {}
+    for p in result:gmatch("[^,]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
+
+    local note = tonumber(parts[1]) or note_from_name(parts[1] or "")
+    if not note or note < 0 or note > 127 then
+      reaper.MB("Invalid note — skipping this item.", "Error", 0)
+      goto continue
+    end
+    local layer = math.max(1, math.min(3, tonumber(parts[2]) or 1))
+
+    local assign_ok, fx_idx = assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, nil)
+    if not assign_ok then goto continue end
+
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.volume, 0.8)
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pan, 0.5)
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(0))
+
+    preview_wav(full_path)
+    local res = reaper.MB(
+      string.format("%s\nNote: %s  L%d\n\nYes = keep   No = skip",
+        wav_name, note_name(note), layer),
+      string.format("Keep? (%d/%d)", idx, #items), 4
+    )
+    stop_preview()
+
+    if res ~= 6 then
+      delete_meta(track, fx_idx)
+      reaper.TrackFX_Delete(track, fx_idx)
+    end
+
+    ::continue::
+  end
 end
 
 -- ── Main ──────────────────────────────────────────────────────────────────────
@@ -1128,9 +1227,11 @@ local function main()
     local instances = scan_triaz_instances(track)
     local inst_count = #instances
 
+    local sel_count = reaper.CountSelectedMediaItems(0)
     local menu_items = {
       "Add / assign sample (full params)",
       "Quick assign (browse + note only)",
+      string.format("Import selected items (%d selected)", sel_count),
       "Load kit preset (15 kits)",
       string.format("Tweak existing (%d instance%s)", inst_count, inst_count == 1 and "" or "s"),
       "Switch track",
@@ -1138,17 +1239,19 @@ local function main()
     }
 
     local choice = pick_from_list("TRIAZ RS5k Browser", menu_items)
-    if not choice or choice == 6 then break end
+    if not choice or choice == 7 then break end
 
     if choice == 1 then
       add_assignment_flow(track)
     elseif choice == 2 then
       quick_assign_flow(track)
     elseif choice == 3 then
-      load_kit_flow(track)
+      import_selected_items_flow(track)
     elseif choice == 4 then
-      tweak_mode(track)
+      load_kit_flow(track)
     elseif choice == 5 then
+      tweak_mode(track)
+    elseif choice == 6 then
       local new_track = select_track()
       if new_track then track = new_track end
     end
