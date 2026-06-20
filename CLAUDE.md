@@ -12,6 +12,10 @@ Lua script for REAPER that lets user browse TRIAZ library and assign samples
 to specific notes via ReaSamplomatic5000 (RS5k), fully accessible via screen reader.
 Replaces the need to hand-edit SFZ files when swapping individual sounds.
 
+Script: `triaz_browser.lua`
+Deployed to: `C:\Users\juanp\AppData\Roaming\REAPER\Scripts\triaz_browser.lua`
+Run via REAPER Actions list.
+
 ---
 
 ## Accessibility constraints
@@ -19,28 +23,99 @@ Replaces the need to hand-edit SFZ files when swapping individual sounds.
 - **No GFX canvas** — drawn UIs are not screen reader accessible.
 - Use only native Windows dialogs: `reaper.GetUserInputs()`, `reaper.MB()`, `reaper.ShowPopupMenu()`.
 - Prefer sequential dialogs over complex layouts.
+- ReaImGui IS installed (`reaper_imgui-x64.dll`) but canvas is inaccessible — do not use.
+
+---
+
+## Installed REAPER extensions
+
+- **SWS/S&M 2.14.0.7** (`reaper_sws-x64.dll`) — CF_Preview, CF_LocateInExplorer, etc.
+- **js_ReaScriptAPI** (`reaper_js_ReaScriptAPI64.dll`) — JS_ window/file functions
+- **ReaImGui** (`reaper_imgui-x64.dll`) — ImGui GUI (NOT for screen reader use)
+- **OSARA** (`reaper_osara64.dll`) — screen reader accessibility layer
 
 ---
 
 ## REAPER API key points
 
-### Preview
-- **SWS CF_Preview** — plays WAV directly without loading into sampler. Requires SWS extension (installed). Use for browsing.
-  - `reaper.CF_Preview_Play(source)` after `reaper.CF_Preview_CreateFromFile(path)`
-- **StuffMIDIMessage** — fires MIDI note into focused track. Use after loading into RS5k to preview in context.
-  - `reaper.StuffMIDIMessage(0, 0x90, note, velocity)` / `0x80` for note-off
+### Preview (SWS 2.14 API)
 
-### RS5k configuration (via FX params)
-RS5k = VST `reasampl5k` (or `reasamplomatic5000`). Key params (0-indexed):
-- Param 0: sample file (set via `reaper.TrackFX_SetNamedConfigParm`)
-- Use `reaper.TrackFX_SetNamedConfigParm(track, fx_idx, "FILE0", path)` to load sample
-- Note range: params for min/max note
-- Loop mode: set to no_loop for Noise type WAVs (see looping WAVs below)
+SWS 2.14 **removed** `CF_Preview_CreateFromFile`. New flow:
+
+```lua
+-- Create PCM source (caller must destroy)
+local src = reaper.PCM_Source_CreateFromFile(path)
+-- Wrap in CF_Preview object
+local preview = reaper.CF_CreatePreview(src)
+-- Configure
+reaper.CF_Preview_SetValue(preview, "D_VOLUME", 1.0)
+reaper.CF_Preview_SetValue(preview, "B_LOOP",   0.0)
+reaper.CF_Preview_SetValue(preview, "I_OUTCHAN", 0)  -- direct hardware out; REQUIRED
+-- Play
+reaper.CF_Preview_Play(preview)
+
+-- Stop + cleanup
+reaper.CF_Preview_Stop(preview)
+reaper.PCM_Source_Destroy(src)
+```
+
+**Key:** `I_OUTCHAN=0` (direct hardware output) is required. `CF_Preview_SetOutputTrack`
+routes through REAPER mixer which requires active playback — Play returns false when
+project is stopped. Hardware out bypasses mixer and always works.
+
+`CF_Preview_SetOutputTrack(preview, ReaProject, MediaTrack)` — takes 3 args (project + track).
+Returns true but CF_Preview_Play then returns false when project is stopped.
+
+### RS5k params (verified via TrackFX_GetParamName dump, 33 params total)
+
+```lua
+local RS5K_PARAM = {
+  volume   = 0,   -- linear gain
+  pan      = 1,   -- 0=L 0.5=C 1=R
+  note_lo  = 3,   -- Note range start (param 2 = "Gain for min velocity" — NOT note_lo)
+  note_hi  = 4,   -- Note range end
+  pitch_st = 15,  -- Pitch adjust (param 4 = Note range end — NOT pitch)
+  loop     = 12,  -- Loop on/off (param 6 = "Pitch for end note" — NOT loop)
+}
+-- note_mid removed: param 11 = "Obey note-offs", not note_mid
+```
+
+Normalization: `note/127` for note params, `(semitones+24)/48` for pitch.
+Single-note drum: set `note_lo = note_hi = target_note`.
+
+Load sample: `reaper.TrackFX_SetNamedConfigParm(track, fx_idx, "FILE0", path)`
+Loop off (Noise WAVs): `TrackFX_SetParamNormalized(track, fx_idx, 12, 0)`
 
 ### Finding/adding RS5k on track
+
 ```lua
 reaper.TrackFX_AddByName(track, "reasamplomatic5000", false, -1)
 ```
+
+### Useful SWS CF_ functions
+
+- `reaper.CF_CreatePreview(PCM_source)` → CF_Preview object
+- `reaper.CF_LocateInExplorer(path)` — reveal file in Windows Explorer
+- `reaper.CF_GetSWSVersion()` — returns loaded SWS version string
+- `reaper.CF_GetFocusedFXChain()` — get focused FX chain window handle
+- `reaper.CF_ExportMediaSource(source, path)` — export audio to file
+
+---
+
+## Script architecture (triaz_browser.lua)
+
+Main entry: `main()` → select/create track → action loop:
+1. Add assignment (full: note, layer, pitch zone, vol, pan, pitch)
+2. Quick assign (minimal: note + layer only)
+3. Import selected media items → assign to notes
+4. Load kit (15 preset kits)
+5. Tweak mode (edit existing RS5k instances)
+6. Switch track
+
+**Metadata:** stored via `SetProjExtState` keyed by FX name (`note|layer|drum_type|tag`).
+Scan: `scan_triaz_instances(track)` reads all RS5k FX names + metadata on track.
+
+**Preview flow:** `preview_wav(path)` → MB dialog blocks → `stop_preview()` on close.
 
 ---
 
@@ -74,7 +149,7 @@ Total: ~9,910 WAVs across 16 Drum Types.
 
 ### Looping WAVs (Noise type — all 10)
 
-These have embedded `smpl` loop chunks. Must disable looping in RS5k:
+These have embedded `smpl` loop chunks. Must disable looping in RS5k (param 12 = 0):
 - `wa-triaz-noise-amp_hum.wav`
 - `wa-triaz-noise-cassette_lofi.wav`
 - `wa-triaz-noise-hiss_synth.wav`
@@ -86,7 +161,7 @@ These have embedded `smpl` loop chunks. Must disable looping in RS5k:
 - `wa-triaz-noise-vinyl_3.wav`
 - `wa-triaz-noise-water.wav`
 
-All other drum types (9,900 WAVs) verified clean — no embedded loops.
+All other drum types verified clean — no embedded loops.
 
 ### Tag sibling clusters (useful for round-robin / variation browsing)
 
@@ -123,16 +198,7 @@ All other drum types (9,900 WAVs) verified clean — no embedded loops.
 
 ---
 
-## Deployment
-
-REAPER scripts folder: `C:\Users\juanp\AppData\Roaming\REAPER\Scripts\`
-Run via REAPER Actions list.
-
----
-
 ## TODO
 
 ### Active
-- Scaffold main Lua script: browse drum type → tag → WAV → assign to RS5k on note
-- SWS preview integration for WAV auditioning while browsing
-- Auto-detect and disable loop for Noise type WAVs in RS5k
+- Full end-to-end test of all flows after RS5k param + preview fixes
