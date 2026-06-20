@@ -74,10 +74,11 @@ local function note_from_name(s)
   s = s:upper():gsub("%s+", "")
   local name, oct = s:match("^([A-G]#?)(-?%d+)$")
   if not name then return nil end
-  local idx = 0
+  local idx = nil
   for i, n in ipairs(NOTE_NAMES) do
     if n == name then idx = i - 1; break end
   end
+  if not idx then return nil end
   return (tonumber(oct) + 2) * 12 + idx
 end
 
@@ -376,6 +377,11 @@ local function delete_meta(track, fx_idx)
   reaper.SetProjExtState(0, "TRIAZ_BROWSER", meta_key(track, fx_idx), "")
 end
 
+local function remove_rs5k(track, fx_idx)
+  delete_meta(track, fx_idx)
+  reaper.TrackFX_Delete(track, fx_idx)
+end
+
 -- Scan track for all TRIAZ RS5k instances via project ext state
 local function scan_triaz_instances(track)
   local instances = {}
@@ -398,10 +404,16 @@ local RS5K_NAMES = {
   "RS5k",
   "Samplomatic5000",
 }
+local _rs5k_working_name = nil
+
 local function add_rs5k(track)
+  if _rs5k_working_name then
+    local idx = reaper.TrackFX_AddByName(track, _rs5k_working_name, false, -1)
+    if idx >= 0 then return idx end
+  end
   for _, name in ipairs(RS5K_NAMES) do
     local idx = reaper.TrackFX_AddByName(track, name, false, -1)
-    if idx >= 0 then return idx end
+    if idx >= 0 then _rs5k_working_name = name; return idx end
   end
   -- Debug: list what FX are available so user can report correct name
   local dbg = "RS5k not found. Tried:\n" .. table.concat(RS5K_NAMES, "\n")
@@ -529,6 +541,16 @@ local function ask_string(caption, label, default)
   local ok, val = reaper.GetUserInputs(caption, 1, label .. ":", default or "")
   if not ok or val == "" then return nil end
   return val
+end
+
+-- Parse "note,layer" CSV result from a 2-field GetUserInputs dialog.
+-- Returns note (0-127), layer (1-3), or nil on invalid note.
+local function parse_note_layer(result)
+  local parts = {}
+  for p in result:gmatch("[^,]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
+  local note = tonumber(parts[1]) or note_from_name(parts[1] or "")
+  if not note or note < 0 or note > 127 then return nil end
+  return note, math.max(1, math.min(3, tonumber(parts[2]) or 1))
 end
 
 -- ── Browse: native Windows file dialog (js_ReaScriptAPI) ────────────────────
@@ -733,24 +755,14 @@ end
 local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, zone)
   local fx_name = make_fx_name(note, layer, drum_type, tag)
 
-  -- Check if instance already exists
-  local instances = scan_triaz_instances(track)
-  local existing_idx = nil
-  for _, inst in ipairs(instances) do
+  local fx_idx
+  for _, inst in ipairs(scan_triaz_instances(track)) do
     if inst.info.note == note and inst.info.layer == layer then
-      existing_idx = inst.fx_idx
-      break
+      fx_idx = inst.fx_idx; break
     end
   end
 
-  local fx_idx
-  if existing_idx then
-    fx_idx = existing_idx
-    reaper.MB(
-      string.format("Updating L%d on note %d (%s)", layer, note, note_name(note)),
-      "Update RS5k", 0
-    )
-  else
+  if not fx_idx then
     fx_idx = add_rs5k(track)
     if fx_idx < 0 then
       reaper.MB("Failed to add RS5k. Is reasamplomatic5000 installed?", "Error", 0)
@@ -837,7 +849,7 @@ local function tweak_mode(track)
   if action == 1 then
     -- swap sample via native file dialog
     local new_wav, new_path, new_type, new_tag = browse_sample()
-    if not new_wav then stop_preview(); return end
+    if not new_wav then return end
 
     local is_noise = (new_type == "Noise") and NOISE_LOOP_FILES[new_wav]
     local new_fx_name = make_fx_name(info.note, info.layer, new_type, new_tag)
@@ -880,8 +892,7 @@ local function tweak_mode(track)
 
   elseif action == 6 then
     if ask_yes_no("Remove this RS5k instance?", "Confirm Remove") then
-      delete_meta(track, fx_idx)
-      reaper.TrackFX_Delete(track, fx_idx)
+      remove_rs5k(track, fx_idx)
       reaper.MB("Removed.", "Done", 0)
     end
   end
@@ -891,7 +902,7 @@ end
 
 local function add_assignment_flow(track)
   local wav_name, full_path, drum_type, tag = browse_sample()
-  if not wav_name then stop_preview(); return end
+  if not wav_name then return end
 
   -- 2. All assignment params in ONE dialog
   -- Pitch zone hint
@@ -984,15 +995,12 @@ local function add_assignment_flow(track)
     if choice == 6 then  -- Yes: keep
       break
     elseif choice == 7 then  -- No: try another
-      delete_meta(track, fx_idx)
-      reaper.TrackFX_Delete(track, fx_idx)
+      remove_rs5k(track, fx_idx)
       local new_wav, new_path, new_type, new_tag = browse_sample()
       if not new_wav then stop_preview(); return end
       wav_name, full_path, drum_type, tag = new_wav, new_path, new_type, new_tag
-      -- loop re-assigns with same note/layer/params
     else  -- Cancel: discard
-      delete_meta(track, fx_idx)
-      reaper.TrackFX_Delete(track, fx_idx)
+      remove_rs5k(track, fx_idx)
       return
     end
   end
@@ -1017,7 +1025,7 @@ local function load_kit_flow(track)
     if choice == 2 then return end  -- Cancel
     if choice == 6 then             -- Yes: remove existing
       for i = #existing, 1, -1 do
-        reaper.TrackFX_Delete(track, existing[i].fx_idx)
+        remove_rs5k(track, existing[i].fx_idx)
       end
     end
     -- No: just add new alongside
@@ -1042,7 +1050,9 @@ local function load_kit_flow(track)
   local loaded, failed = 0, 0
   for _, v in ipairs(kit.voices) do
     local tag_hint = v.tag
-    local tag = (tag_hint ~= "") and find_tag(v.type, tag_hint) or list_dirs(TRIAZ_BASE .. v.type)[1]
+    local tag
+    if tag_hint ~= "" then tag = find_tag(v.type, tag_hint) end
+    if not tag then tag = list_dirs(TRIAZ_BASE .. v.type)[1] end
     if not tag then failed = failed + 1; goto continue end
 
     local wav, path = pick_kit_wav(v.type, tag)
@@ -1075,7 +1085,7 @@ end
 
 local function quick_assign_flow(track)
   local wav_name, full_path, drum_type, tag = browse_sample()
-  if not wav_name then stop_preview(); return end
+  if not wav_name then return end
 
   local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
   local ok, result = reaper.GetUserInputs(
@@ -1083,27 +1093,16 @@ local function quick_assign_flow(track)
     "MIDI note (0-127 or name; suggested=" .. gm_note .. "),Layer (1-3)",
     gm_note .. ",1"
   )
-  if not ok then stop_preview(); return end
+  if not ok then return end
 
-  local parts = {}
-  for p in result:gmatch("[^,]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
-
-  local note = tonumber(parts[1]) or note_from_name(parts[1] or "")
-  if not note or note < 0 or note > 127 then
-    reaper.MB("Invalid note.", "Error", 0); return
-  end
-  local layer = math.max(1, math.min(3, tonumber(parts[2]) or 1))
+  local note, layer = parse_note_layer(result)
+  if not note then reaper.MB("Invalid note.", "Error", 0); return end
 
   while true do
     local assign_ok, fx_idx = assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, nil)
     if not assign_ok then return end
 
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.volume, 0.8)
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pan, 0.5)
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(0))
-
     preview_wav(full_path)
-    -- MB type 3 = Yes / No / Cancel
     local res = reaper.MB(
       string.format("%s / %s / %s\nNote: %s  L%d\n\nYes = keep   No = browse again   Cancel = discard",
         drum_type, tag, wav_name, note_name(note), layer),
@@ -1113,8 +1112,7 @@ local function quick_assign_flow(track)
 
     if res == 6 then return end  -- Yes: keep
 
-    delete_meta(track, fx_idx)
-    reaper.TrackFX_Delete(track, fx_idx)
+    remove_rs5k(track, fx_idx)
 
     if res == 7 then  -- No: browse again
       local new_wav, new_path, new_type, new_tag = browse_sample()
@@ -1176,22 +1174,14 @@ local function import_selected_items_flow(track)
     )
     if not ok then break end
 
-    local parts = {}
-    for p in result:gmatch("[^,]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
-
-    local note = tonumber(parts[1]) or note_from_name(parts[1] or "")
-    if not note or note < 0 or note > 127 then
+    local note, layer = parse_note_layer(result)
+    if not note then
       reaper.MB("Invalid note — skipping this item.", "Error", 0)
       goto continue
     end
-    local layer = math.max(1, math.min(3, tonumber(parts[2]) or 1))
 
     local assign_ok, fx_idx = assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, nil)
     if not assign_ok then goto continue end
-
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.volume, 0.8)
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pan, 0.5)
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(0))
 
     preview_wav(full_path)
     local res = reaper.MB(
@@ -1201,10 +1191,7 @@ local function import_selected_items_flow(track)
     )
     stop_preview()
 
-    if res ~= 6 then
-      delete_meta(track, fx_idx)
-      reaper.TrackFX_Delete(track, fx_idx)
-    end
+    if res ~= 6 then remove_rs5k(track, fx_idx) end
 
     ::continue::
   end
