@@ -505,38 +505,14 @@ end
 -- ── Dialog helpers ───────────────────────────────────────────────────────────
 
 -- Short lists (≤8): embed numbered items in the window title — screen readers
--- always announce the title, so one GetUserInputs dialog suffices.
--- Longer lists: MB to read list, then GetUserInputs for number.
+-- Native context menu via gfx.showmenu — screen reader navigable with arrow keys.
 local function pick_from_list(title, items)
-  if #items == 0 then
-    reaper.MB("No items found.", title, 0)
-    return nil
-  end
-
-  local ok, result
-  if #items <= 8 then
-    -- Single dialog: title carries the list
-    local parts = {}
-    for i, v in ipairs(items) do parts[#parts + 1] = i .. "=" .. v end
-    local compact = table.concat(parts, "  ")
-    -- Window title = "TITLE — 1=Foo  2=Bar  ..."
-    local dialog_title = title .. " — " .. compact
-    ok, result = reaper.GetUserInputs(dialog_title, 1, "Number:", "")
-  else
-    -- Two dialogs: MB list then number input
-    local lines = {}
-    for i, v in ipairs(items) do lines[#lines + 1] = i .. ": " .. v end
-    reaper.MB(table.concat(lines, "\n"), title, 0)
-    ok, result = reaper.GetUserInputs(title, 1, "Number:", "")
-  end
-
-  if not ok or result == "" then return nil end
-  local n = tonumber(result)
-  if not n or n < 1 or n > #items then
-    reaper.MB("Invalid number.", "Error", 0)
-    return nil
-  end
-  return n
+  if #items == 0 then reaper.MB("No items found.", title, 0); return nil end
+  gfx.init(title, 0, 0, 0, 0, 0)
+  gfx.x, gfx.y = 0, 0
+  local choice = gfx.showmenu(table.concat(items, "|"))
+  gfx.quit()
+  return choice ~= 0 and choice or nil
 end
 
 local function ask_yes_no(msg, title)
