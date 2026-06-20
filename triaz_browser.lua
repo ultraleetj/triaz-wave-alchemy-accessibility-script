@@ -323,15 +323,14 @@ local function parse_fx_name(name)
 end
 
 -- ── RS5k parameter indices (0-based) ────────────────────────────────────────
--- Discovered from REAPER SDK / community docs
+-- Param indices verified via TrackFX_GetParamName dump on RS5k (total 33 params)
 local RS5K_PARAM = {
-  volume    = 0,   -- 0..1 (linear)
-  pan       = 1,   -- 0..1 (0=L, 0.5=C, 1=R)
-  note_lo   = 2,   -- 0..1 mapped from MIDI 0..127
-  note_hi   = 3,
-  pitch_st  = 4,   -- semitone offset, normalized: 0=center (-24..+24 range)
-  loop      = 6,   -- 0=no loop, 1=loop
-  note_mid  = 11,  -- "note for normal pitch" 0..1 mapped MIDI 0..127
+  volume   = 0,   -- 0..1 (linear gain)
+  pan      = 1,   -- 0..1 (0=L, 0.5=C, 1=R)
+  note_lo  = 3,   -- Note range start: 0..1 mapped from MIDI 0..127
+  note_hi  = 4,   -- Note range end:   0..1 mapped from MIDI 0..127
+  pitch_st = 15,  -- Pitch adjust: normalized 0..1 where 0.5 = 0 semitones
+  loop     = 12,  -- Loop: 0=no loop, 1=loop
 }
 
 local function midi_to_param(midi) return midi / 127.0 end
@@ -431,7 +430,7 @@ end
 -- ── Configure RS5k instance ──────────────────────────────────────────────────
 
 local function configure_rs5k(track, fx_idx, params)
-  -- params: {path, note_lo, note_hi, note_mid, pitch_st, volume, pan, fx_name, no_loop}
+  -- params: {path, note_lo, note_hi, pitch_st, volume, pan, fx_name, no_loop}
 
   if params.path then
     reaper.TrackFX_SetNamedConfigParm(track, fx_idx, "FILE0", params.path)
@@ -446,10 +445,7 @@ local function configure_rs5k(track, fx_idx, params)
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.note_hi,
       midi_to_param(params.note_hi))
   end
-  if params.note_mid then
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.note_mid,
-      midi_to_param(params.note_mid))
-  end
+
   if params.pitch_st then
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st,
       pitch_to_param(params.pitch_st))
@@ -476,29 +472,33 @@ end
 
 -- ── Preview ──────────────────────────────────────────────────────────────────
 
-local preview_source = nil
+local preview_pcm = nil  -- PCM_source (must destroy separately)
+local preview_obj = nil  -- CF_Preview handle
 
 local function stop_preview()
-  if not preview_source then return end
-  if reaper.CF_Preview_Stop   then reaper.CF_Preview_Stop(preview_source)   end
-  if reaper.CF_Preview_Destroy then reaper.CF_Preview_Destroy(preview_source) end
-  preview_source = nil
+  if preview_obj then
+    reaper.CF_Preview_Stop(preview_obj)
+    preview_obj = nil
+  end
+  if preview_pcm then
+    reaper.PCM_Source_Destroy(preview_pcm)
+    preview_pcm = nil
+  end
 end
 
 local function preview_wav(path)
-  if not reaper.CF_Preview_CreateFromFile then return end
   stop_preview()
-  local src = reaper.CF_Preview_CreateFromFile(path)
-  if not src then
-    src = reaper.CF_Preview_CreateFromFile(path:gsub("\\", "/"))
-  end
+  local src = reaper.PCM_Source_CreateFromFile(path)
+  if not src then src = reaper.PCM_Source_CreateFromFile(path:gsub("\\", "/")) end
   if not src then return end
-  if reaper.CF_Preview_SetValue then
-    reaper.CF_Preview_SetValue(src, "D_VOLUME", 1.0)
-    reaper.CF_Preview_SetValue(src, "B_LOOP",   0.0)
-  end
-  reaper.CF_Preview_Play(src)
-  preview_source = src
+  local preview = reaper.CF_CreatePreview(src)
+  if not preview then reaper.PCM_Source_Destroy(src); return end
+  reaper.CF_Preview_SetValue(preview, "D_VOLUME", 1.0)
+  reaper.CF_Preview_SetValue(preview, "B_LOOP",   0.0)
+  reaper.CF_Preview_SetValue(preview, "I_OUTCHAN", 0)
+  reaper.CF_Preview_Play(preview)
+  preview_pcm = src
+  preview_obj = preview
 end
 
 
@@ -778,16 +778,14 @@ local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_
 
   local is_noise = (drum_type == "Noise") and NOISE_LOOP_FILES[wav_name]
 
-  local note_lo, note_hi, note_mid, pitch_st
+  local note_lo, note_hi, pitch_st
   if zone then
     note_lo  = zone.lo
     note_hi  = zone.hi
-    note_mid = zone.mid
-    pitch_st = 0  -- user decides shift after; start centered
+    pitch_st = 0
   else
     note_lo  = note
     note_hi  = note
-    note_mid = note
     pitch_st = 0
   end
 
@@ -795,7 +793,6 @@ local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_
     path     = full_path,
     note_lo  = note_lo,
     note_hi  = note_hi,
-    note_mid = note_mid,
     pitch_st = pitch_st,
     volume   = 0.8,
     pan      = 0.5,
@@ -1045,7 +1042,7 @@ local function load_kit_flow(track)
       local fx_idx = add_rs5k(track)
       if fx_idx >= 0 then
         configure_rs5k(track, fx_idx, {
-          path = path, note_lo = 37, note_hi = 37, note_mid = 37,
+          path = path, note_lo = 37, note_hi = 37,
           pitch_st = 0, volume = 0.8, pan = 0.5,
           fx_name = make_fx_name(37, 1, "Perc Acoustic", rimshot_tag),
         })
@@ -1069,7 +1066,7 @@ local function load_kit_flow(track)
 
     local is_noise = (v.type == "Noise") and NOISE_LOOP_FILES[wav]
     configure_rs5k(track, fx_idx, {
-      path = path, note_lo = v.note, note_hi = v.note, note_mid = v.note,
+      path = path, note_lo = v.note, note_hi = v.note,
       pitch_st = 0, volume = 0.8, pan = 0.5, no_loop = is_noise,
       fx_name = make_fx_name(v.note, 1, v.type, tag),
     })
