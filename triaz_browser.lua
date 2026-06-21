@@ -387,6 +387,8 @@ local RS5K_PARAM = {
   note_hi       = 4,   -- Note range end:   0..1 mapped from MIDI 0..127
   pitch_note_lo = 5,   -- Pitch at note_lo: same normalization as pitch_st
   pitch_note_hi = 6,   -- Pitch at note_hi: same normalization as pitch_st
+  max_voices       = 8,   -- Max polyphony per instance: normalized N/9 (0=unlimited)
+  attack           = 9,   -- ADSR attack time: 0=instant, 1=max
   loop             = 12,  -- Loop: 0=no loop, 1=loop
   obey_note_off    = 11,  -- 0=one-shot (play to end), 1=stop on note-off
   pitch_st         = 15,  -- Pitch adjust: normalized 0..1 where 0.5 = 0 semitones
@@ -529,6 +531,14 @@ local function configure_rs5k(track, fx_idx, params)
   end
   if params.no_loop then
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.loop, 0)
+  end
+  if params.attack ~= nil then
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.attack, params.attack)
+  end
+  if params.max_voices ~= nil then
+    -- 0 = unlimited; N voices = N/9 normalized (0.111≈1, 0.222≈2 … 1.0≈9)
+    local norm = (params.max_voices == 0) and 0.0 or (params.max_voices / 9.0)
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.max_voices, norm)
   end
   if params.path then
     -- velocity sensitivity: gain at min velocity = 0 (silent at vel 0, full at vel 127)
@@ -997,18 +1007,20 @@ local function add_assignment_flow(track)
     "Volume dB (0=unity)",
     "Pan % (-100=L  0=C  100=R)",
     "Pitch shift semitones (-24 to +24)",
-    "Zone pitch scale (1.0=1st per key  0.5=half  2.0=double)",
+    "Zone pitch scale (1.0=1st/key  neg=invert  0=no shift)",
+    "Attack (0.0=instant  1.0=max)",
+    "Max voices (0=unlimited  1-9)",
   }, ",")
-  local defaults = pick_note_default(gm_note) .. ",1,0,0,0,0,1.0"
+  local defaults = pick_note_default(gm_note) .. ",1,0,0,0,0,1.0,0.0,0"
 
   local ok, result = reaper.GetUserInputs(
-    "Assign: " .. wav_name, 7, captions, defaults
+    "Assign: " .. wav_name, 9, captions, defaults
   )
   if not ok then return end
 
   local parts = {}
   for p in result:gmatch("[^,]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
-  while #parts < 7 do parts[#parts + 1] = "0" end
+  while #parts < 9 do parts[#parts + 1] = "0" end
 
   -- Parse pitch zone first — if zone is selected, note field is ignored entirely
   local zone_n = tonumber(parts[3]) or 0
@@ -1028,11 +1040,13 @@ local function add_assignment_flow(track)
   -- Parse layer
   local layer = math.max(1, math.min(3, tonumber(parts[2]) or 1))
 
-  -- Parse vol/pan/pitch/zone scale
-  local vol_db         = tonumber(parts[4]) or 0
-  local pan_pct        = tonumber(parts[5]) or 0
-  local pitch_st       = math.max(-24, math.min(24, tonumber(parts[6]) or 0))
-  local zone_pitch_scale = math.max(0.0, tonumber(parts[7]) or 1.0)
+  -- Parse vol/pan/pitch/zone scale/attack/max voices
+  local vol_db           = tonumber(parts[4]) or 0
+  local pan_pct          = tonumber(parts[5]) or 0
+  local pitch_st         = math.max(-24, math.min(24, tonumber(parts[6]) or 0))
+  local zone_pitch_scale = tonumber(parts[7]) or 1.0
+  local attack           = math.max(0.0, math.min(1.0, tonumber(parts[8]) or 0.0))
+  local max_voices       = math.max(0, math.min(9, math.floor(tonumber(parts[9]) or 0)))
 
   -- Check layer count
   local instances = scan_triaz_instances(track)
@@ -1054,10 +1068,14 @@ local function add_assignment_flow(track)
     )
     if not assign_ok then return end
 
-    -- Apply vol/pan/pitch
+    -- Apply vol/pan/pitch/attack/max voices
     local lin_vol = math.min(1.0, 10 ^ (vol_db / 20.0))
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.volume, lin_vol)
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pan, (pan_pct / 200.0) + 0.5)
+    configure_rs5k(track, fx_idx, {
+      volume     = lin_vol,
+      pan        = (pan_pct / 200.0) + 0.5,
+      attack     = attack > 0 and attack or nil,
+      max_voices = max_voices > 0 and max_voices or nil,
+    })
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(pitch_st))
 
     -- Apply zone pitch scale (MODE=0: freely configurable, params 5+6 scaled)
@@ -1075,14 +1093,17 @@ local function add_assignment_flow(track)
 
     -- Keep / try another / cancel
     -- MB type 3 = Yes / No / Cancel
+    local atk_str   = attack > 0 and string.format("  Atk:%.2f", attack) or ""
+    local voice_str = max_voices > 0 and ("  Voices:" .. max_voices) or ""
     local choice = reaper.MB(
       string.format(
-        "%s / %s / %s\nNote: %s%s  L%d  Vol:%ddB  Pan:%d%%  Pitch:%dst%s\n\nYes = keep\nNo = try another sample\nCancel = discard",
+        "%s / %s / %s\nNote: %s%s  L%d  Vol:%ddB  Pan:%d%%  Pitch:%dst%s%s%s\n\nYes = keep\nNo = try another sample\nCancel = discard",
         drum_type, tag, wav_name,
         note_name(target_note),
         zone and (" zone " .. note_name(zone.lo) .. "-" .. note_name(zone.hi)) or "",
         layer, vol_db, pan_pct, pitch_st,
-        zone and ("  Scale:" .. zone_pitch_scale) or ""
+        zone and ("  Scale:" .. zone_pitch_scale) or "",
+        atk_str, voice_str
       ),
       "Keep this sample?", 3
     )
