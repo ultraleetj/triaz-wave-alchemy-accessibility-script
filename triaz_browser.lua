@@ -518,6 +518,9 @@ local function configure_rs5k(track, fx_idx, params)
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_hi,
       pitch_to_param(params.pitch_note_hi))
   end
+  if params.mode then
+    reaper.TrackFX_SetNamedConfigParm(track, fx_idx, "MODE", tostring(params.mode))
+  end
   if params.volume ~= nil then
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.volume, params.volume)
   end
@@ -843,17 +846,18 @@ local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_
 
   local is_noise = (drum_type == "Noise") and NOISE_LOOP_FILES[wav_name]
 
-  local note_lo, note_hi, pitch_st, pitch_note_lo, pitch_note_hi
+  local note_lo, note_hi, pitch_st, pitch_note_lo, mode
   if zone then
     note_lo       = zone.lo
     note_hi       = zone.hi
     pitch_st      = 0
-    pitch_note_lo = zone.lo - zone.mid  -- semitones below center at lowest note
-    pitch_note_hi = zone.hi - zone.mid  -- semitones above center at highest note
+    pitch_note_lo = zone.lo - zone.mid  -- semitones from center at lowest note
+    mode          = 2                   -- NoteSemitoneShifted: 1st per semitone from pitch_note_lo
   else
     note_lo  = note
     note_hi  = note
     pitch_st = 0
+    mode     = 1                        -- Sample/drum mode: ignore MIDI note pitch
   end
 
   configure_rs5k(track, fx_idx, {
@@ -862,7 +866,7 @@ local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_
     note_hi       = note_hi,
     pitch_st      = pitch_st,
     pitch_note_lo = pitch_note_lo,
-    pitch_note_hi = pitch_note_hi,
+    mode          = mode,
     volume        = 0.8,
     pan           = 0.5,
     no_loop       = is_noise,
