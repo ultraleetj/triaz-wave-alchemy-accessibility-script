@@ -852,6 +852,63 @@ local function dump_rs5k_params(track, fx_idx)
   reaper.MB(text, "RS5k Param Dump", 0)
 end
 
+-- ── Assign sample to RS5k ────────────────────────────────────────────────────
+
+-- Find or create RS5k for note+layer, configure it.
+-- force_new=true: always add new instance, skip existing-instance lookup.
+local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, zone, force_new)
+  local fx_name = make_fx_name(note, layer, drum_type, tag)
+
+  local fx_idx
+  if not force_new then
+    for _, inst in ipairs(scan_triaz_instances(track)) do
+      if inst.info.note == note and inst.info.layer == layer then
+        fx_idx = inst.fx_idx; break
+      end
+    end
+  end
+
+  if not fx_idx then
+    fx_idx = add_rs5k(track)
+    if fx_idx < 0 then
+      reaper.MB("Failed to add RS5k. Is reasamplomatic5000 installed?", "Error", 0)
+      return false
+    end
+  end
+
+  local is_noise = (drum_type == "Noise") and NOISE_LOOP_FILES[wav_name]
+
+  local note_lo, note_hi, pitch_st, pitch_note_lo, mode
+  if zone then
+    note_lo       = zone.lo
+    note_hi       = zone.hi
+    pitch_st      = 0
+    pitch_note_lo = zone.lo - zone.mid  -- semitones from center at lowest note
+    mode          = 2                   -- NoteSemitoneShifted: 1st per semitone from pitch_note_lo
+  else
+    note_lo  = note
+    note_hi  = note
+    pitch_st = 0
+    mode     = 1                        -- Sample/drum mode: ignore MIDI note pitch
+  end
+
+  configure_rs5k(track, fx_idx, {
+    path          = full_path,
+    note_lo       = note_lo,
+    note_hi       = note_hi,
+    pitch_st      = pitch_st,
+    pitch_note_lo = pitch_note_lo,
+    mode          = mode,
+    volume        = 0.8,
+    pan           = 0.5,
+    no_loop       = is_noise,
+    fx_name       = fx_name,
+    meta          = {note=note, layer=layer, drum_type=drum_type, tag=tag},
+  })
+
+  return true, fx_idx
+end
+
 -- ── Shared assign dialog + preview + keep/retry/discard loop ────────────────
 -- wav_name/full_path/drum_type/tag: initial sample to show in dialog.
 -- defs (optional table): pre-populate fields {note, layer, zone_n, vol_db, pan_pct,
@@ -988,63 +1045,6 @@ local function run_assign_dialog(track, wav_name, full_path, drum_type, tag, def
       return nil
     end
   end
-end
-
--- ── Assign sample to RS5k ────────────────────────────────────────────────────
-
--- Find or create RS5k for note+layer, configure it.
--- force_new=true: always add new instance, skip existing-instance lookup.
-local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, zone, force_new)
-  local fx_name = make_fx_name(note, layer, drum_type, tag)
-
-  local fx_idx
-  if not force_new then
-    for _, inst in ipairs(scan_triaz_instances(track)) do
-      if inst.info.note == note and inst.info.layer == layer then
-        fx_idx = inst.fx_idx; break
-      end
-    end
-  end
-
-  if not fx_idx then
-    fx_idx = add_rs5k(track)
-    if fx_idx < 0 then
-      reaper.MB("Failed to add RS5k. Is reasamplomatic5000 installed?", "Error", 0)
-      return false
-    end
-  end
-
-  local is_noise = (drum_type == "Noise") and NOISE_LOOP_FILES[wav_name]
-
-  local note_lo, note_hi, pitch_st, pitch_note_lo, mode
-  if zone then
-    note_lo       = zone.lo
-    note_hi       = zone.hi
-    pitch_st      = 0
-    pitch_note_lo = zone.lo - zone.mid  -- semitones from center at lowest note
-    mode          = 2                   -- NoteSemitoneShifted: 1st per semitone from pitch_note_lo
-  else
-    note_lo  = note
-    note_hi  = note
-    pitch_st = 0
-    mode     = 1                        -- Sample/drum mode: ignore MIDI note pitch
-  end
-
-  configure_rs5k(track, fx_idx, {
-    path          = full_path,
-    note_lo       = note_lo,
-    note_hi       = note_hi,
-    pitch_st      = pitch_st,
-    pitch_note_lo = pitch_note_lo,
-    mode          = mode,
-    volume        = 0.8,
-    pan           = 0.5,
-    no_loop       = is_noise,
-    fx_name       = fx_name,
-    meta          = {note=note, layer=layer, drum_type=drum_type, tag=tag},
-  })
-
-  return true, fx_idx
 end
 
 -- ── Tweak mode: edit existing instances ──────────────────────────────────────
