@@ -153,12 +153,14 @@ Main menu items:
 2. **Quick assign** — `pick_source()` → 2-field dialog (note + layer only)
 3. **Import selected (N)** — flat item; calls `import_selected_items_flow()` for batch
 4. **Load kit** — submenu: all 15 kits directly selectable
-5. **Tweak** — top-level "Assign to pitch zone (play note)" + per-instance sub-submenus:
-   Swap / Edit parameters / Preview / Dump / Remove
+5. **Tweak** — submenu with two top-level items + per-instance sub-submenus:
+   - Assign to pitch zone (play note)
+   - Cycle samples
+   - Per-instance: Swap / Edit parameters / Preview / Dump / Remove
 6. **Randomize**
 7. **Exit**
 
-**gfx.showmenu submenu indexing:** `>header` and `<` closer items are NOT counted in return value. Use a separate `gfx_idx` counter (incremented only by real items) to map return values to actions. `open_sub`/`close_sub` only append to `parts[]`, never increment `gfx_idx`.
+**gfx.showmenu submenu indexing:** `>header` opens a submenu (not counted in return value); bare `<` closes one (also not counted). `open_sub`/`close_sub` only append to `parts[]`, never increment `gfx_idx`. **CRITICAL:** any menu item whose text starts with `>` is treated as a submenu opener, swallowing all subsequent items into it. Never use `>` or `<` at the start of a label string (e.g. `"> Next"` breaks everything — use `"Next"` instead). `#item` = disabled, `!item` = checkmark — these ARE counted in return index.
 
 **pick_from_list:** always prepends `#title` as disabled header item (screen reader announces it). Return value adjusted by -1 since header occupies index 1.
 
@@ -174,6 +176,12 @@ Scan: `scan_triaz_instances(track)` reads all RS5k metadata on track.
 Zone instances: metadata `note` = zone.mid (91/98/105); detected by matching PITCH_ZONES midpoints.
 
 **Preview flow:** `preview_wav(path)` → MB dialog blocks → `stop_preview()` on close.
+
+**tweak_mode loop:** actions 3 (Preview) and 4 (Dump) are non-terminal — after completing they loop back to the per-instance action picker. Actions 1 (Swap), 2 (Edit), 5 (Remove) are terminal and return to main menu. When called with pre-set `action_n` from the menu, `next_action` is set to nil after first iteration so subsequent loops always show the picker.
+
+**scan_non_zone_instances(track):** shared helper used by `cycle_samples_flow` and `randomize_flow`; returns all instances where `drum_type ~= "Zone"`.
+
+**cycle_samples_flow:** inside Tweak submenu. Partitions instances into solo, tom group (drum_type=="Tom", cycled together), and zone group (note in PITCH_ZONES mids 91/98/105, sub-picked by zone). Cycle menu inlines full WAV list from current tag after nav items (Previous/Next/Change tag/Done); current WAV marked with `* `. Swaps are live (no keep/discard). `swap_group` loops over all instances in the group.
 
 ### Kit loader (load_kit_flow)
 

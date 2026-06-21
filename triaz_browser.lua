@@ -1085,93 +1085,101 @@ local function tweak_mode(track, inst_n, action_n)
   local ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, fx_idx, "FILE0")
   local cur_wav = cur_file and cur_file:match("[^\\/]+$") or "?"
 
-  local action = action_n
-  if not action then
-    local choices = {
-      "Swap sample (re-browse)",
-      "Edit parameters (vol / pan / pitch / attack / voices)",
-      "Preview current sample",
-      "Dump RS5k params (diagnostic)",
-      "Remove this instance",
-    }
-    action = pick_from_list("Edit: " .. cur_wav, choices)
-    if not action then return end
-  end
+  local choices = {
+    "Swap sample (re-browse)",
+    "Edit parameters (vol / pan / pitch / attack / voices)",
+    "Preview current sample",
+    "Dump RS5k params (diagnostic)",
+    "Remove this instance",
+  }
 
-  if action == 1 then
-    local new_wav, new_path, new_type, new_tag = pick_source()
-    if not new_wav then return end
-
-    local is_noise = (new_type == "Noise") and NOISE_LOOP_FILES[new_wav]
-    local new_fx_name = make_fx_name(info.note, info.layer, new_type, new_tag)
-
-    configure_rs5k(track, fx_idx, {
-      path    = new_path,
-      no_loop = is_noise,
-      fx_name = new_fx_name,
-    })
-    reaper.MB("Sample updated.", "Done", 0)
-
-  elseif action == 2 then
-    local vol_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.volume)
-    local pan_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pan)
-    local pit_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st)
-    local atk_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.attack)
-    local vox_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.max_voices)
-
-    -- Detect pitch zone: metadata stores zone.mid as note; zone mids are 91/98/105
-    local zone_n_def = 0
-    for zi, z in ipairs(PITCH_ZONES) do
-      if info.note == z.mid then zone_n_def = zi; break end
+  -- Loop: non-terminal actions (Preview, Dump) return here; terminal ones exit.
+  local next_action = action_n
+  while true do
+    local action = next_action
+    next_action = nil  -- subsequent iterations always show picker
+    if not action then
+      action = pick_from_list("Edit: " .. cur_wav, choices)
+      if not action then return end
     end
 
-    -- Read pitch_note_lo/hi directly from RS5k params 5+6
-    local pnlo_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_lo)
-    local pnhi_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_hi)
-    local zone_lo_st_def = math.floor(param_to_pitch(pnlo_raw) + 0.5)
-    local zone_hi_st_def = math.floor(param_to_pitch(pnhi_raw) + 0.5)
-    -- If unset zone (kit placeholder), default to -7/+10
-    if zone_n_def > 0 and zone_lo_st_def == -24 and zone_hi_st_def == -24 then
-      zone_lo_st_def, zone_hi_st_def = -7, 10
-    end
+    if action == 1 then
+      local new_wav, new_path, new_type, new_tag = pick_source()
+      if not new_wav then return end
 
-    local wav_path = (ok_f and cur_file ~= "") and cur_file or ""
-    local wn = wav_path:match("[^\\/]+$") or cur_wav
+      local is_noise = (new_type == "Noise") and NOISE_LOOP_FILES[new_wav]
+      local new_fx_name = make_fx_name(info.note, info.layer, new_type, new_tag)
 
-    local new_fx = run_assign_dialog(track, wn, wav_path, info.drum_type, info.tag, {
-      note             = info.note,
-      layer            = info.layer,
-      zone_n           = zone_n_def,
-      vol_db           = math.floor(20 * math.log(vol_raw + 1e-9, 10) + 0.5),
-      pan_pct          = math.floor((pan_raw - 0.5) * 200 + 0.5),
-      pitch_st         = math.floor(param_to_pitch(pit_raw) + 0.5),
-      zone_lo_st       = zone_lo_st_def,
-      zone_hi_st       = zone_hi_st_def,
-      attack           = math.floor(atk_raw * 100 + 0.5) / 100,
-      max_voices       = math.floor(vox_raw * 9 + 0.5),
-      skip_layer_check = true,
-      force_new        = true,
-    })
-    if new_fx then
-      remove_rs5k(track, fx_idx)  -- new_fx always > fx_idx (appended); safe to remove old
-    end
+      configure_rs5k(track, fx_idx, {
+        path    = new_path,
+        no_loop = is_noise,
+        fx_name = new_fx_name,
+      })
+      reaper.MB("Sample updated.", "Done", 0)
+      return
 
-  elseif action == 3 then
-    if ok_f and cur_file ~= "" then
-      preview_wav(cur_file)
-      reaper.MB("Playing preview. Close to stop.", "Preview", 0)
-      stop_preview()
-    else
-      reaper.MB("No sample loaded.", "Preview", 0)
-    end
+    elseif action == 2 then
+      local vol_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.volume)
+      local pan_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pan)
+      local pit_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st)
+      local atk_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.attack)
+      local vox_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.max_voices)
 
-  elseif action == 4 then
-    dump_rs5k_params(track, fx_idx)
+      local zone_n_def = 0
+      for zi, z in ipairs(PITCH_ZONES) do
+        if info.note == z.mid then zone_n_def = zi; break end
+      end
 
-  elseif action == 5 then
-    if ask_yes_no("Remove this RS5k instance?", "Confirm Remove") then
-      remove_rs5k(track, fx_idx)
-      reaper.MB("Removed.", "Done", 0)
+      local pnlo_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_lo)
+      local pnhi_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_hi)
+      local zone_lo_st_def = math.floor(param_to_pitch(pnlo_raw) + 0.5)
+      local zone_hi_st_def = math.floor(param_to_pitch(pnhi_raw) + 0.5)
+      if zone_n_def > 0 and zone_lo_st_def == -24 and zone_hi_st_def == -24 then
+        zone_lo_st_def, zone_hi_st_def = -7, 10
+      end
+
+      local wav_path = (ok_f and cur_file ~= "") and cur_file or ""
+      local wn = wav_path:match("[^\\/]+$") or cur_wav
+
+      local new_fx = run_assign_dialog(track, wn, wav_path, info.drum_type, info.tag, {
+        note             = info.note,
+        layer            = info.layer,
+        zone_n           = zone_n_def,
+        vol_db           = math.floor(20 * math.log(vol_raw + 1e-9, 10) + 0.5),
+        pan_pct          = math.floor((pan_raw - 0.5) * 200 + 0.5),
+        pitch_st         = math.floor(param_to_pitch(pit_raw) + 0.5),
+        zone_lo_st       = zone_lo_st_def,
+        zone_hi_st       = zone_hi_st_def,
+        attack           = math.floor(atk_raw * 100 + 0.5) / 100,
+        max_voices       = math.floor(vox_raw * 9 + 0.5),
+        skip_layer_check = true,
+        force_new        = true,
+      })
+      if new_fx then
+        remove_rs5k(track, fx_idx)
+      end
+      return
+
+    elseif action == 3 then
+      if ok_f and cur_file ~= "" then
+        preview_wav(cur_file)
+        reaper.MB("Playing preview. Close to stop.", "Preview", 0)
+        stop_preview()
+      else
+        reaper.MB("No sample loaded.", "Preview", 0)
+      end
+      -- non-terminal: loop back to action picker
+
+    elseif action == 4 then
+      dump_rs5k_params(track, fx_idx)
+      -- non-terminal: loop back to action picker
+
+    elseif action == 5 then
+      if ask_yes_no("Remove this RS5k instance?", "Confirm Remove") then
+        remove_rs5k(track, fx_idx)
+        reaper.MB("Removed.", "Done", 0)
+      end
+      return
     end
   end
 end
