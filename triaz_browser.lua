@@ -4,6 +4,7 @@
 
 local TRIAZ_BASE = "X:\\samplers\\TRIAZ\\Samples\\TRIAZ - Factory Collection\\"
 
+
 -- Drum types in folder order
 local DRUM_TYPES = {
   "Kick Electronic",
@@ -472,7 +473,6 @@ local function add_rs5k(track)
     local idx = reaper.TrackFX_AddByName(track, name, false, -1)
     if idx >= 0 then _rs5k_working_name = name; return idx end
   end
-  -- Debug: list what FX are available so user can report correct name
   local dbg = "RS5k not found. Tried:\n" .. table.concat(RS5K_NAMES, "\n")
     .. "\n\nFX on this track:\n"
   local n = reaper.TrackFX_GetCount(track)
@@ -1112,6 +1112,7 @@ local function load_kit_flow(track)
   end
 
   local stats = {loaded=0, failed=0}
+  local t_start = reaper.time_precise()
 
   reaper.PreventUIRefresh(1)
 
@@ -1167,9 +1168,10 @@ local function load_kit_flow(track)
   reaper.PreventUIRefresh(-1)
   reaper.TrackList_AdjustWindows(false)
 
+  local elapsed = reaper.time_precise() - t_start
   reaper.MB(
-    string.format("Kit: %s\nLoaded: %d  Failed: %d\n\nToms: pitched -2 to +3 st from %s, panned R→L.\nHH Open: ~50ms note-off release.\nUpper zones E5-C7 empty — assign via Add sample.",
-      kit.name, stats.loaded, stats.failed,
+    string.format("Kit: %s\nLoaded: %d  Failed: %d  (%.1fs)\n\nToms: pitched -2 to +3 st from %s, panned R→L.\nHH Open: ~50ms note-off release.\nUpper zones E5-C7 empty — assign via Add sample.",
+      kit.name, stats.loaded, stats.failed, elapsed,
       note_name(TOM_PITCH_CENTER)
     ),
     "Kit Loaded", 0
