@@ -372,12 +372,14 @@ end
 -- ── RS5k parameter indices (0-based) ────────────────────────────────────────
 -- Param indices verified via TrackFX_GetParamName dump on RS5k (total 33 params)
 local RS5K_PARAM = {
-  volume   = 0,   -- 0..1 (linear gain)
-  pan      = 1,   -- 0..1 (0=L, 0.5=C, 1=R)
-  note_lo  = 3,   -- Note range start: 0..1 mapped from MIDI 0..127
-  note_hi  = 4,   -- Note range end:   0..1 mapped from MIDI 0..127
-  pitch_st = 15,  -- Pitch adjust: normalized 0..1 where 0.5 = 0 semitones
-  loop     = 12,  -- Loop: 0=no loop, 1=loop
+  volume        = 0,   -- 0..1 (linear gain)
+  pan           = 1,   -- 0..1 (0=L, 0.5=C, 1=R)
+  gain_min_vel  = 2,   -- Gain at velocity 0: 0=silent (velocity sensitive), 1=full (flat)
+  note_lo       = 3,   -- Note range start: 0..1 mapped from MIDI 0..127
+  note_hi       = 4,   -- Note range end:   0..1 mapped from MIDI 0..127
+  loop          = 12,  -- Loop: 0=no loop, 1=loop
+  obey_note_off = 11,  -- 0=one-shot (play to end), 1=stop on note-off
+  pitch_st      = 15,  -- Pitch adjust: normalized 0..1 where 0.5 = 0 semitones
 }
 
 local function midi_to_param(midi) return midi / 127.0 end
@@ -505,6 +507,14 @@ local function configure_rs5k(track, fx_idx, params)
   end
   if params.no_loop then
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.loop, 0)
+  end
+  if params.path then
+    -- velocity sensitivity: gain at min velocity = 0 (silent at vel 0, full at vel 127)
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.gain_min_vel, 0)
+  end
+  if params.obey_note_off ~= nil then
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.obey_note_off,
+      params.obey_note_off and 1.0 or 0.0)
   end
   -- fx_name via named config parm (display only, not used for scanning)
   if params.fx_name then
@@ -1042,15 +1052,16 @@ local function load_voice(track, drum_type, tag, notes, pitch_center, stats)
     local fx_idx = add_rs5k(track)
     if fx_idx < 0 then stats.failed = stats.failed + 1 else
       configure_rs5k(track, fx_idx, {
-        path     = path,
-        note_lo  = note,
-        note_hi  = note,
-        pitch_st = pitch_center and (note - pitch_center) or 0,
-        volume   = 0.8,
-        pan      = 0.5,
-        no_loop  = is_noise,
-        fx_name  = make_fx_name(note, 1, drum_type, display_tag),
-        meta     = {note=note, layer=1, drum_type=drum_type, tag=display_tag},
+        path          = path,
+        note_lo       = note,
+        note_hi       = note,
+        pitch_st      = pitch_center and (note - pitch_center) or 0,
+        volume        = 0.8,
+        pan           = 0.5,
+        no_loop       = is_noise,
+        obey_note_off = is_noise,  -- Noise: stop on note-off; drums: play to end
+        fx_name       = make_fx_name(note, 1, drum_type, display_tag),
+        meta          = {note=note, layer=1, drum_type=drum_type, tag=display_tag},
       })
       stats.loaded = stats.loaded + 1
     end
@@ -1276,10 +1287,11 @@ local function apply_random_wav(track, inst, new_type, new_tag)
   local is_noise   = (dtype == "Noise") and NOISE_LOOP_FILES[wav]
   local disp_tag   = (tag ~= "" and tag ~= "(root)") and tag or "(root)"
   configure_rs5k(track, inst.fx_idx, {
-    path    = path,
-    no_loop = is_noise,
-    fx_name = make_fx_name(info.note, info.layer, dtype, disp_tag),
-    meta    = {note=info.note, layer=info.layer, drum_type=dtype, tag=disp_tag},
+    path          = path,
+    no_loop       = is_noise,
+    obey_note_off = is_noise,
+    fx_name       = make_fx_name(info.note, info.layer, dtype, disp_tag),
+    meta          = {note=info.note, layer=info.layer, drum_type=dtype, tag=disp_tag},
   })
   return true, wav, path
 end
