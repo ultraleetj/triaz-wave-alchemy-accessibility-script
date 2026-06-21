@@ -1116,17 +1116,30 @@ local function tweak_mode(track, inst_n, action_n)
     local atk_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.attack)
     local vox_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.max_voices)
 
+    -- Detect pitch zone: metadata stores zone.mid as note; zone mids are 91/98/105
+    local zone_n_def, zone_pitch_scale_def = 0, 1.0
+    for zi, z in ipairs(PITCH_ZONES) do
+      if info.note == z.mid then
+        zone_n_def = zi
+        local pnlo_st = param_to_pitch(
+          reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_lo))
+        local span = z.lo - z.mid  -- always negative
+        if span ~= 0 then zone_pitch_scale_def = pnlo_st / span end
+        break
+      end
+    end
+
     local wav_path = (ok_f and cur_file ~= "") and cur_file or ""
     local wn = wav_path:match("[^\\/]+$") or cur_wav
 
     local new_fx = run_assign_dialog(track, wn, wav_path, info.drum_type, info.tag, {
       note             = info.note,
       layer            = info.layer,
-      zone_n           = 0,
+      zone_n           = zone_n_def,
       vol_db           = math.floor(20 * math.log(vol_raw + 1e-9, 10) + 0.5),
       pan_pct          = math.floor((pan_raw - 0.5) * 200 + 0.5),
       pitch_st         = math.floor(param_to_pitch(pit_raw) + 0.5),
-      zone_pitch_scale = 1.0,
+      zone_pitch_scale = zone_pitch_scale_def,
       attack           = math.floor(atk_raw * 100 + 0.5) / 100,
       max_voices       = math.floor(vox_raw * 9 + 0.5),
       skip_layer_check = true,
