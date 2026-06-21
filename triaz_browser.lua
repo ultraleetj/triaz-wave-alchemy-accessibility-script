@@ -1796,7 +1796,6 @@ local function show_main_menu(track)
 
   add("Randomize", function() randomize_flow(track) end)
   add("Help",      function() show_help() end)
-  local switch_pos = add("Switch track")
   local exit_pos   = add("Close menu")
 
   gfx.init("TRIAZ RS5k Browser", 0, 0, 0, 0, 0)
@@ -1804,12 +1803,8 @@ local function show_main_menu(track)
   local choice = gfx.showmenu(table.concat(parts, "|"))
   gfx.quit()
 
-  if choice == 0       then return true,  track end
-  if choice == exit_pos   then return false, track end
-  if choice == switch_pos then
-    local new_track = select_track()
-    return true, new_track or track
-  end
+  if choice == 0         then return true,  track end
+  if choice == exit_pos  then return false, track end
 
   local fn = actions[choice]
   if fn then fn() end
