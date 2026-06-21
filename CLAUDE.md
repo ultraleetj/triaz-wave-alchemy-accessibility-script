@@ -103,12 +103,28 @@ Returns true but CF_Preview_Play then returns false when project is stopped.
 ```
 
 Currently mapped in `RS5K_PARAM`: volume=0, pan=1, gain_min_vel=2, note_lo=3, note_hi=4,
-loop=12, obey_note_off=11, pitch_st=15, release_note_off=26, use_note_off_rel=27.
+pitch_note_lo=5, pitch_note_hi=6, loop=12, obey_note_off=11, pitch_st=15,
+release_note_off=26, use_note_off_rel=27.
 
 Normalization: `note/127` for note params, `(semitones+24)/48` for pitch.
 
 Load sample: `reaper.TrackFX_SetNamedConfigParm(track, fx_idx, "FILE0", path)`
 Loop off (Noise WAVs): `TrackFX_SetParamNormalized(track, fx_idx, 12, 0)`
+
+### RS5k MODE named config param
+
+Set via `TrackFX_SetNamedConfigParm(track, fx_idx, "MODE", value)` (string value).
+
+| Value | Name | Behavior |
+|-------|------|----------|
+| `"0"` | FreelyConfigurableShifted | Params 5+6 define pitch at note_lo and note_hi; interpolates between them |
+| `"1"` | Sample (drum mode) | **Default.** Ignores MIDI note — plays at fixed pitch regardless of note played |
+| `"2"` | NoteSemitoneShifted | Chromatic: 1 semitone per key, anchored by param 5 (pitch at note_lo) |
+
+Source: jamesWalker55/reaper-scripting-5-index rs5k-tools/0.0.1/lua_modules/reaper-api/rs5k.lua
+
+**Pitch zones use MODE="0"** (freely configurable) with params 5+6 scaled by `zone_pitch_scale`.
+Drums use MODE="1" (default, no need to set explicitly — but set anyway for safety).
 
 ### Finding/adding RS5k on track
 

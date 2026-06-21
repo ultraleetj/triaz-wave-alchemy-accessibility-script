@@ -997,17 +997,18 @@ local function add_assignment_flow(track)
     "Volume dB (0=unity)",
     "Pan % (-100=L  0=C  100=R)",
     "Pitch shift semitones (-24 to +24)",
+    "Zone pitch scale (1.0=1st per key  0.5=half  2.0=double)",
   }, ",")
-  local defaults = pick_note_default(gm_note) .. ",1,0,0,0,0"
+  local defaults = pick_note_default(gm_note) .. ",1,0,0,0,0,1.0"
 
   local ok, result = reaper.GetUserInputs(
-    "Assign: " .. wav_name, 6, captions, defaults
+    "Assign: " .. wav_name, 7, captions, defaults
   )
   if not ok then return end
 
   local parts = {}
   for p in result:gmatch("[^,]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
-  while #parts < 6 do parts[#parts + 1] = "0" end
+  while #parts < 7 do parts[#parts + 1] = "0" end
 
   -- Parse pitch zone first — if zone is selected, note field is ignored entirely
   local zone_n = tonumber(parts[3]) or 0
@@ -1027,10 +1028,11 @@ local function add_assignment_flow(track)
   -- Parse layer
   local layer = math.max(1, math.min(3, tonumber(parts[2]) or 1))
 
-  -- Parse vol/pan/pitch
-  local vol_db  = tonumber(parts[4]) or 0
-  local pan_pct = tonumber(parts[5]) or 0
-  local pitch_st = math.max(-24, math.min(24, tonumber(parts[6]) or 0))
+  -- Parse vol/pan/pitch/zone scale
+  local vol_db         = tonumber(parts[4]) or 0
+  local pan_pct        = tonumber(parts[5]) or 0
+  local pitch_st       = math.max(-24, math.min(24, tonumber(parts[6]) or 0))
+  local zone_pitch_scale = math.max(0.0, tonumber(parts[7]) or 1.0)
 
   -- Check layer count
   local instances = scan_triaz_instances(track)
@@ -1058,17 +1060,29 @@ local function add_assignment_flow(track)
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pan, (pan_pct / 200.0) + 0.5)
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(pitch_st))
 
+    -- Apply zone pitch scale (MODE=0: freely configurable, params 5+6 scaled)
+    if zone then
+      local pnlo = (zone.lo - zone.mid) * zone_pitch_scale
+      local pnhi = (zone.hi - zone.mid) * zone_pitch_scale
+      configure_rs5k(track, fx_idx, {
+        pitch_note_lo = pnlo,
+        pitch_note_hi = pnhi,
+        mode = 0,
+      })
+    end
+
     preview_wav(full_path)
 
     -- Keep / try another / cancel
     -- MB type 3 = Yes / No / Cancel
     local choice = reaper.MB(
       string.format(
-        "%s / %s / %s\nNote: %s%s  L%d  Vol:%ddB  Pan:%d%%  Pitch:%dst\n\nYes = keep\nNo = try another sample\nCancel = discard",
+        "%s / %s / %s\nNote: %s%s  L%d  Vol:%ddB  Pan:%d%%  Pitch:%dst%s\n\nYes = keep\nNo = try another sample\nCancel = discard",
         drum_type, tag, wav_name,
         note_name(target_note),
         zone and (" zone " .. note_name(zone.lo) .. "-" .. note_name(zone.hi)) or "",
-        layer, vol_db, pan_pct, pitch_st
+        layer, vol_db, pan_pct, pitch_st,
+        zone and ("  Scale:" .. zone_pitch_scale) or ""
       ),
       "Keep this sample?", 3
     )
