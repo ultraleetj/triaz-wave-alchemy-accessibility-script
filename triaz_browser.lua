@@ -1445,6 +1445,180 @@ local function randomize_flow(track)
   end
 end
 
+-- ── Help ─────────────────────────────────────────────────────────────────────
+
+local function show_help()
+  local pages = {
+    {
+      title = "TRIAZ RS5k Browser — Help (1/4): Overview",
+      text = [[
+WHAT THIS SCRIPT DOES
+---------------------
+This script lets you browse the TRIAZ sample library and load samples into
+ReaSamplOmatic5000 (RS5k) on a REAPER track. Each sample gets its own RS5k
+instance, assigned to a specific MIDI note. When you play that note on your
+keyboard or in a MIDI item, that sample plays.
+
+Everything works through standard REAPER dialogs — no drawn windows — so it
+is fully accessible with a screen reader.
+
+HOW THE LIBRARY IS ORGANIZED
+-----------------------------
+The TRIAZ library is organized in three levels:
+
+  Drum Type  (e.g. "Kick Electronic", "Snare Acoustic", "HiHat Closed")
+    └── Tag  (e.g. "Deep", "Punchy", "808", "Lo-Fi")
+          └── WAV files  (the actual samples)
+
+When you browse for a sample, you navigate into
+  X:\samplers\TRIAZ\Samples\TRIAZ - Factory Collection\
+then into a Drum Type folder, then a Tag folder, then pick a WAV.
+
+NOTES AND LAYERS
+----------------
+Every RS5k instance is assigned to a MIDI note (like C2, D#4).
+  - Note C2 = MIDI 36 = Kick in General MIDI (GM) layout.
+  - The script suggests a GM note for each drum type automatically.
+  - You can stack up to 3 samples on the same note (called layers 1, 2, 3).
+    All three will play at once when that note is triggered.
+]]
+    },
+    {
+      title = "TRIAZ RS5k Browser — Help (2/4): Main Menu Items",
+      text = [[
+MAIN MENU — WHAT EACH ITEM DOES
+---------------------------------
+
+ADD / ASSIGN SAMPLE
+  Opens the file browser so you can pick any WAV from the TRIAZ library.
+  Then asks for note, layer, pitch zone, volume, pan, and pitch shift in
+  one dialog. After assigning, it previews the sample and asks if you want
+  to keep it, try another, or discard.
+
+QUICK ASSIGN
+  Same as above but only asks for note and layer — skips vol/pan/pitch.
+  Faster for simple assignments.
+
+IMPORT SELECTED
+  If you have audio items selected on the REAPER timeline, this menu lets
+  you assign each one to RS5k. Each file gets its own note + layer dialog,
+  then a preview. Only appears when items are selected.
+
+LOAD KIT
+  Loads a full drum kit in one shot — 15 preset kits to choose from.
+  Each kit fills notes 21–108 with kicks, snares, hats, toms, perc, and more.
+  Toms are pitched and panned across the stereo field automatically.
+  Three empty "zones" at notes 88–108 (E5–C7) are left for you to fill with
+  pitched samples via Add/assign.
+
+TWEAK
+  Lists all RS5k instances on the track. Pick one, then choose:
+    - Swap sample      Replace with a different WAV
+    - Edit volume/pan  Adjust gain (dB) and stereo position
+    - Edit pitch       Shift pitch in semitones (-24 to +24)
+    - Preview          Play the current sample
+    - Dump RS5k params Show all internal parameter values (diagnostic)
+    - Remove           Delete this RS5k instance
+
+RANDOMIZE
+  Four modes:
+    1. Single voice    Pick one instance; randomizes its WAV (same drum type/tag)
+    2. Entire kit      All instances get a new random WAV (same type/tag)
+    3. Entire kit + tags  Each instance also gets a random tag (same drum type)
+    4. Full random     Every instance gets a completely random type/tag/WAV
+]]
+    },
+    {
+      title = "TRIAZ RS5k Browser — Help (3/4): Kits and Zones",
+      text = [[
+THE 15 PRESET KITS
+------------------
+  01 Techno Dark        02 Techno Punchy      03 Techno 808
+  04 House Classic      05 House Electronic   06 Lo-Fi Acoustic
+  07 Lo-Fi Tape         08 Rap/Trap           09 Acoustic Studio
+  10 Acoustic Room      11 Drum Machine       12 Electronica/IDM
+  13 Organic/World      14 Heavy/Industrial   15 Pop/Disco
+
+Each kit assigns voices to these GM notes:
+  35/36 Kick (two timbres)   38/40 Snare (two timbres)   37 Rimshot (fixed)
+  39 Clap   42/44 Hi-Hat Closed   46 Hi-Hat Open
+  41/43/45/47/48/50 Toms (6 toms, pitched and panned L to R)
+  49/57 Crash   51/59 Ride   54 Perc/Shaker
+
+Fixed voices (same in all kits):
+  52 Chinese cymbal   55 Splash   53 Ride bell   56 Cowbell
+  60-64 Bongo/Conga/Tumba   65-66 Timbale
+  75 Claves   76-77 Woodblock   82 Shaker   86-87 Surdo
+
+Lower extras (notes 21-34): Perc Glitch, Layer, Noise, and Foley sounds.
+
+UPPER PITCH ZONES (notes 88-108)
+---------------------------------
+Three empty RS5k slots are created at:
+  Zone 1: E5-A#5  (notes 88-94)
+  Zone 2: B5-F6   (notes 95-101)
+  Zone 3: F#6-C7  (notes 102-108)
+
+These are for pitched samples. Assign any TRIAZ WAV to one of these zones
+via "Add / assign sample", then choose the zone number in the dialog.
+The sample will pitch-shift automatically as you play different notes
+within the zone.
+
+NOISE SAMPLES AND LOOPING
+--------------------------
+The 10 Noise type WAVs have embedded loop points — they would play forever.
+The script automatically disables looping for them in RS5k so they play
+once and stop. Hi-Hat Open samples use a short note-off release (~50ms)
+so they fade out cleanly when you release the key.
+]]
+    },
+    {
+      title = "TRIAZ RS5k Browser — Help (4/4): Tips and Troubleshooting",
+      text = [[
+TIPS FOR SCREEN READER USERS
+-----------------------------
+- All menus are native context menus. Navigate with arrow keys.
+- All data entry uses standard REAPER input dialogs (Tab between fields).
+- Preview dialogs are standard message boxes — press Enter or Space to close
+  (this also stops playback).
+- The "Dump RS5k params" option in Tweak prints all parameter values to the
+  REAPER console and a message box — useful for checking what is loaded.
+
+TRACK SETUP
+-----------
+When the script starts, it asks which track to use:
+  - Yes = use the currently selected track
+  - No  = create a new track (you name it)
+"Switch track" in the menu lets you move to a different track mid-session.
+
+OVERWRITING A KIT
+-----------------
+When you Load kit and the track already has instances:
+  - Yes     = remove all existing instances, load fresh kit
+  - No      = add kit voices alongside existing ones (stacks on top)
+  - Cancel  = abort, do nothing
+
+COMMON ISSUES
+-------------
+"RS5k not found"
+  ReaSamplOmatic5000 is built into REAPER. If it cannot be found, check that
+  the plugin is not disabled in REAPER preferences.
+
+"Cannot parse DrumType/Tag from path"
+  The selected file is not inside the expected library structure. Navigate
+  into X:\samplers\TRIAZ\Samples\TRIAZ - Factory Collection\ first.
+
+"No WAVs found"
+  The tag folder may be empty or the path does not exist. Try a different tag.
+]]
+    },
+  }
+
+  for _, page in ipairs(pages) do
+    reaper.MB(page.text, page.title, 0)
+  end
+end
+
 -- ── Main menu (structured with submenus) ─────────────────────────────────────
 
 -- Builds menu string + parallel action list, shows it, runs chosen action.
@@ -1534,8 +1708,9 @@ local function show_main_menu(track)
   end
 
   add("Randomize", function() randomize_flow(track) end)
+  add("Help",      function() show_help() end)
   local switch_pos = add("Switch track")
-  local exit_pos   = add("Exit")
+  local exit_pos   = add("Close menu")
 
   gfx.init("TRIAZ RS5k Browser", 0, 0, 0, 0, 0)
   gfx.x, gfx.y = 0, 0
