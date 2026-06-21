@@ -1462,6 +1462,11 @@ keyboard or in a MIDI item, that sample plays.
 Everything works through standard REAPER dialogs — no drawn windows — so it
 is fully accessible with a screen reader.
 
+TIP: To read this help text in full, use object navigation to explore the
+dialog. In NVDA: NVDA+numpad2/4/6/8 to move between objects, NVDA+numpad5
+to read the current object. In JAWS: use the virtual cursor (insert+Z to
+toggle) or read window text with insert+B. In Narrator: Caps+arrow keys.
+
 HOW THE LIBRARY IS ORGANIZED
 -----------------------------
 The TRIAZ library is organized in three levels:
