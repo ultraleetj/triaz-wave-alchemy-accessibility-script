@@ -66,22 +66,46 @@ project is stopped. Hardware out bypasses mixer and always works.
 `CF_Preview_SetOutputTrack(preview, ReaProject, MediaTrack)` — takes 3 args (project + track).
 Returns true but CF_Preview_Play then returns false when project is stopped.
 
-### RS5k params (verified via TrackFX_GetParamName dump, 33 params total)
+### RS5k params (full dump, 33 params total)
 
-```lua
-local RS5K_PARAM = {
-  volume   = 0,   -- linear gain
-  pan      = 1,   -- 0=L 0.5=C 1=R
-  note_lo  = 3,   -- Note range start (param 2 = "Gain for min velocity" — NOT note_lo)
-  note_hi  = 4,   -- Note range end
-  pitch_st = 15,  -- Pitch adjust (param 4 = Note range end — NOT pitch)
-  loop     = 12,  -- Loop on/off (param 6 = "Pitch for end note" — NOT loop)
-}
--- note_mid removed: param 11 = "Obey note-offs", not note_mid
+```
+[0]  Volume                        0..1 linear gain
+[1]  Pan                           0=L 0.5=C 1=R
+[2]  Gain for minimum velocity     0=silent at vel0 (velocity sensitive), 1=flat
+[3]  Note range start              note/127
+[4]  Note range end                note/127
+[5]  Pitch for start note          pitch at note_lo (range-based pitch scaling)
+[6]  Pitch for end note            pitch at note_hi
+[7]  MIDI channel                  0=all
+[8]  Max voices                    0.1111≈1 voice; limits polyphony per instance
+[9]  Attack                        ADSR attack time
+[10] Release                       ADSR release time
+[11] Obey note-offs                0=one-shot, 1=stop on note-off
+[12] Loop (requires note-offs)     0=no loop, 1=loop
+[13] Sample start offset           0..1
+[14] Sample end offset             0..1
+[15] Pitch adjust                  (semitones+24)/48, 0.5=0st
+[16] Pitchbend range
+[17] Minimum velocity              0..1
+[18] Maximum velocity              0..1
+[19] Probability of hitting        1.0=always; <1 randomly skips hits
+[20] Round-robin mode              cycles FILE0/FILE1/etc on retrigger
+[21] Filter played notes
+[22] Crossfade loop length
+[23] Loop start offset
+[24] Decay                         ADSR decay
+[25] Sustain                       ADSR sustain level
+[26] Release (note-off)            release time after note-off (needs param 27 enabled)
+[27] Use note-off release override 0=off, 1=use param 26 for note-off release
+[28] Legacy voice re-use mode
+[29] Portamento
+[30] Bypass
 ```
 
+Currently mapped in `RS5K_PARAM`: volume=0, pan=1, gain_min_vel=2, note_lo=3, note_hi=4,
+loop=12, obey_note_off=11, pitch_st=15.
+
 Normalization: `note/127` for note params, `(semitones+24)/48` for pitch.
-Single-note drum: set `note_lo = note_hi = target_note`.
 
 Load sample: `reaper.TrackFX_SetNamedConfigParm(track, fx_idx, "FILE0", path)`
 Loop off (Noise WAVs): `TrackFX_SetParamNormalized(track, fx_idx, 12, 0)`
@@ -220,5 +244,5 @@ All other drum types verified clean — no embedded loops.
 
 ## TODO
 
-### Future
-- Nothing currently planned.
+### Pending
+- **HH Open smooth note-off release** — set param 27 (Use note-off release override) = 1 and param 26 (Release note-off) ≈ 50ms normalized value for HiHat Open instances in kit loader. Currently hard-cuts on note-off. Need to determine normalized value for ~50ms (unknown range — requires test). Also add `release_note_off` and `use_note_off_rel` to RS5K_PARAM table and handle in `configure_rs5k`.
