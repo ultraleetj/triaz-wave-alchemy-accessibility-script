@@ -1942,6 +1942,7 @@ TWEAK
         Play any note on your controller. The script catches it, finds the
         matching sample, and asks which zone to move it to and what pitch
         range to use (default -7 / +10 semitones, low to high key).
+    - Cycle samples  (see CYCLE SAMPLES section below)
   Each loaded sample then has its own sub-menu:
     - Swap sample      Pick a different WAV (file browser or timeline item)
     - Edit parameters  Same 10-field dialog, pre-filled with current values.
@@ -1949,6 +1950,26 @@ TWEAK
     - Preview          Play the sample
     - Dump RS5k params Show all parameter values (message box + console)
     - Remove           Delete this instance
+
+CYCLE SAMPLES  (inside Tweak submenu)
+  Live sample browsing — swap sounds while the kit plays, no keep/discard.
+
+  Step 1 — Pick a voice from the list. Each entry shows its note name:
+    C2  Kick Electronic / Deep — wa-triaz-kick-deep-01.wav
+    D2  Snare Acoustic / Room  — wa-triaz-snare-room-02.wav
+    F2–D3  Tom / Deep — wa-triaz-tom-deep-03.wav  (all 6 toms grouped)
+    Pitch Zones (2 assigned)  (sub-picks which zone, then cycles it)
+
+  Step 2 — Cycle menu opens, header shows the current sample. Items:
+    < Previous    Step back one WAV in the current tag (wraps around)
+    > Next        Step forward one WAV
+    Change tag    Jump to a different tag within the same drum type
+    Done          Exit
+    (full list of WAVs in the current tag, current one marked with *)
+
+  Picking any WAV from the list swaps it immediately.
+  Toms: all 6 instances swap to the same WAV at once.
+  Zones: pick which zone first, then cycle that zone independently.
 
 RANDOMIZE
   Four modes:
