@@ -1085,7 +1085,6 @@ local function tweak_mode(track, inst_n, action_n)
     local choices = {
       "Swap sample (re-browse)",
       "Edit parameters (vol / pan / pitch / attack / voices)",
-      "Assign to pitch zone",
       "Preview current sample",
       "Dump RS5k params (diagnostic)",
       "Remove this instance",
@@ -1136,44 +1135,6 @@ local function tweak_mode(track, inst_n, action_n)
     end
 
   elseif action == 3 then
-    -- Reassign current sample to a pitch zone (MODE=0, note range = zone, pitched per key)
-    local zone_lines = {}
-    for i, z in ipairs(PITCH_ZONES) do
-      zone_lines[#zone_lines + 1] = string.format(
-        "%d: %s–%s (center %s)", i, note_name(z.lo), note_name(z.hi), note_name(z.mid)
-      )
-    end
-    local zn = pick_from_list("Assign to pitch zone", zone_lines)
-    if not zn then return end
-    local zone = PITCH_ZONES[zn]
-
-    local ok_scale, scale_str = reaper.GetUserInputs(
-      "Zone pitch scale", 1,
-      "Pitch scale (1.0=1st/key  neg=invert  0=no shift)",
-      "1.0"
-    )
-    if not ok_scale then return end
-    local zone_pitch_scale = tonumber(scale_str) or 1.0
-
-    local pnlo = (zone.lo - zone.mid) * zone_pitch_scale
-    local pnhi = (zone.hi - zone.mid) * zone_pitch_scale
-    local new_fx_name = make_fx_name(zone.mid, info.layer, info.drum_type, info.tag)
-
-    configure_rs5k(track, fx_idx, {
-      note_lo       = zone.lo,
-      note_hi       = zone.hi,
-      pitch_note_lo = pnlo,
-      pitch_note_hi = pnhi,
-      mode          = 0,
-      fx_name       = new_fx_name,
-    })
-    save_meta(track, fx_idx, zone.mid, info.layer, info.drum_type, info.tag)
-    reaper.MB(
-      string.format("Reassigned to zone %s–%s.", note_name(zone.lo), note_name(zone.hi)),
-      "Done", 0
-    )
-
-  elseif action == 4 then
     if ok_f and cur_file ~= "" then
       preview_wav(cur_file)
       reaper.MB("Playing preview. Close to stop.", "Preview", 0)
@@ -1182,15 +1143,109 @@ local function tweak_mode(track, inst_n, action_n)
       reaper.MB("No sample loaded.", "Preview", 0)
     end
 
-  elseif action == 5 then
+  elseif action == 4 then
     dump_rs5k_params(track, fx_idx)
 
-  elseif action == 6 then
+  elseif action == 5 then
     if ask_yes_no("Remove this RS5k instance?", "Confirm Remove") then
       remove_rs5k(track, fx_idx)
       reaper.MB("Removed.", "Done", 0)
     end
   end
+end
+
+-- ── Assign to pitch zone (top-level tweak item) ───────────────────────────────
+-- Play a note to identify the instance, then pick a zone to move it to.
+
+local function assign_to_zone_flow(track)
+  local instances = scan_triaz_instances(track)
+  if #instances == 0 then
+    reaper.MB("No TRIAZ RS5k instances on this track.", "Assign to pitch zone", 0)
+    return
+  end
+
+  reaper.MB(
+    "Play the note you want to move to a pitch zone, then click OK.",
+    "Assign to pitch zone — capture note", 0
+  )
+
+  local played_note
+  for idx = 0, 31 do
+    local retval, buf = reaper.MIDI_GetRecentInputEvent(idx)
+    if retval == 0 then break end
+    if buf and #buf >= 3 then
+      local st  = buf:byte(1)
+      local num = buf:byte(2)
+      local vel = buf:byte(3)
+      if st >= 0x90 and st <= 0x9F and vel > 0 then played_note = num; break end
+    end
+  end
+
+  if not played_note then
+    reaper.MB("No MIDI note captured.", "Error", 0); return
+  end
+
+  local matches = {}
+  for _, inst in ipairs(instances) do
+    if inst.info.note == played_note then matches[#matches + 1] = inst end
+  end
+
+  if #matches == 0 then
+    reaper.MB("No RS5k instance on note " .. note_name(played_note) .. ".", "Error", 0)
+    return
+  end
+
+  local inst
+  if #matches == 1 then
+    inst = matches[1]
+  else
+    local labels = {}
+    for _, m in ipairs(matches) do
+      labels[#labels + 1] = string.format("L%d — %s/%s",
+        m.info.layer, m.info.drum_type, m.info.tag)
+    end
+    local n = pick_from_list(
+      note_name(played_note) .. " has " .. #matches .. " layers — pick one", labels)
+    if not n then return end
+    inst = matches[n]
+  end
+
+  local zone_lines = {}
+  for i, z in ipairs(PITCH_ZONES) do
+    zone_lines[#zone_lines + 1] = string.format(
+      "%d: %s–%s (center %s)", i, note_name(z.lo), note_name(z.hi), note_name(z.mid))
+  end
+  local zn = pick_from_list("Pick pitch zone", zone_lines)
+  if not zn then return end
+  local zone = PITCH_ZONES[zn]
+
+  local ok_s, scale_str = reaper.GetUserInputs(
+    "Zone pitch scale", 1,
+    "Pitch scale (1.0=1st/key  neg=invert  0=no shift)", "1.0"
+  )
+  if not ok_s then return end
+  local zone_pitch_scale = tonumber(scale_str) or 1.0
+
+  local fx_idx = inst.fx_idx
+  local info   = inst.info
+  local pnlo   = (zone.lo - zone.mid) * zone_pitch_scale
+  local pnhi   = (zone.hi - zone.mid) * zone_pitch_scale
+
+  configure_rs5k(track, fx_idx, {
+    note_lo       = zone.lo,
+    note_hi       = zone.hi,
+    pitch_note_lo = pnlo,
+    pitch_note_hi = pnhi,
+    mode          = 0,
+    fx_name       = make_fx_name(zone.mid, info.layer, info.drum_type, info.tag),
+  })
+  save_meta(track, fx_idx, zone.mid, info.layer, info.drum_type, info.tag)
+  reaper.MB(
+    string.format("%s (%s/%s) → zone %s–%s.",
+      note_name(played_note), info.drum_type, info.tag,
+      note_name(zone.lo), note_name(zone.hi)),
+    "Done", 0
+  )
 end
 
 -- ── Add new assignment flow ───────────────────────────────────────────────────
@@ -1645,13 +1700,16 @@ LOAD KIT
   pitched samples via Add/assign.
 
 TWEAK
-  Lists all RS5k instances on the track. Pick one, then choose:
-    - Swap sample         Replace with a different WAV (file browser or timeline item)
-    - Edit parameters     Vol dB, pan %, pitch semitones, attack, max voices
-    - Assign to pitch zone  Move to one of the 3 upper pitch zones (E5-C7, MODE=0)
-    - Preview             Play the current sample
-    - Dump RS5k params    Show all internal parameter values (diagnostic)
-    - Remove              Delete this RS5k instance
+  Top-level item:
+    - Assign to pitch zone (play note)
+        Play a note to identify the instance, then pick a zone (E5-C7, MODE=0).
+        Useful when jamming — no need to know the exact note name.
+  Per-instance sub-menu (pick by label):
+    - Swap sample      Replace with a different WAV (file browser or timeline item)
+    - Edit parameters  Vol dB, pan %, pitch semitones, attack, max voices
+    - Preview          Play the current sample
+    - Dump RS5k params Show all internal parameter values (diagnostic)
+    - Remove           Delete this RS5k instance
 
 RANDOMIZE
   Four modes:
@@ -1815,17 +1873,17 @@ local function show_main_menu(track)
   -- Tweak submenu: each instance expands to its 6 actions
   if inst_count > 0 then
     open_sub(string.format("Tweak (%d)", inst_count))
+    add("Assign to pitch zone (play note)", function() assign_to_zone_flow(track) end)
     for i, inst in ipairs(instances) do
       local info  = inst.info
       local idx   = i
       local label = string.format("L%d %s — %s/%s", info.layer, note_name(info.note), info.drum_type, info.tag)
       open_sub(label)
-      add("Swap sample",          function() tweak_mode(track, idx, 1) end)
-      add("Edit parameters",      function() tweak_mode(track, idx, 2) end)
-      add("Assign to pitch zone", function() tweak_mode(track, idx, 3) end)
-      add("Preview",              function() tweak_mode(track, idx, 4) end)
-      add("Dump RS5k params",     function() tweak_mode(track, idx, 5) end)
-      add("Remove",               function() tweak_mode(track, idx, 6) end)
+      add("Swap sample",      function() tweak_mode(track, idx, 1) end)
+      add("Edit parameters",  function() tweak_mode(track, idx, 2) end)
+      add("Preview",          function() tweak_mode(track, idx, 3) end)
+      add("Dump RS5k params", function() tweak_mode(track, idx, 4) end)
+      add("Remove",           function() tweak_mode(track, idx, 5) end)
       close_sub()
     end
     close_sub()
