@@ -815,7 +815,11 @@ end
 -- ── Track selection ───────────────────────────────────────────────────────────
 
 local function select_track()
-  return reaper.GetSelectedTrack(0, 0)
+  local track = reaper.GetSelectedTrack(0, 0)
+  if not track then return nil end
+  if track == reaper.GetMasterTrack(0) then return nil end
+  if reaper.GetMediaTrackInfo_Value(track, "I_FOLDERDEPTH") == 1 then return nil end
+  return track
 end
 
 -- ── RS5k param diagnostic ────────────────────────────────────────────────────
@@ -2187,7 +2191,6 @@ local function main()
 
   local track = select_track()
   if not track then
-    reaper.MB("Select a track first.", "TRIAZ Browser", 0)
     reaper.Undo_EndBlock("TRIAZ Browser (no track)", -1)
     return
   end
