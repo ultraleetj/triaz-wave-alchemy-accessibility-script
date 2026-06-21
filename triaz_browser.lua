@@ -838,8 +838,9 @@ end
 
 -- ── Tweak mode: edit existing instances ──────────────────────────────────────
 
--- inst_n: pre-selected instance index (from submenu); nil = show picker dialog
-local function tweak_mode(track, inst_n)
+-- inst_n:   pre-selected instance index; nil = show picker dialog
+-- action_n: pre-selected action (1-6);   nil = show action picker dialog
+local function tweak_mode(track, inst_n, action_n)
   local instances = scan_triaz_instances(track)
   if #instances == 0 then
     reaper.MB("No TRIAZ RS5k instances found on this track.", "Tweak", 0)
@@ -868,20 +869,19 @@ local function tweak_mode(track, inst_n)
   local ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, fx_idx, "FILE0")
   local cur_wav = cur_file and cur_file:match("[^\\/]+$") or "?"
 
-  local choices = {
-    "Swap sample (re-browse)",
-    "Edit volume / pan",
-    "Edit pitch semitones",
-    "Preview current sample",
-    "Dump RS5k params (diagnostic)",
-    "Remove this instance",
-  }
-  local action = pick_from_list(
-    "Edit: " .. cur_wav,
-    choices,
-    "Action"
-  )
-  if not action then return end
+  local action = action_n
+  if not action then
+    local choices = {
+      "Swap sample (re-browse)",
+      "Edit volume / pan",
+      "Edit pitch semitones",
+      "Preview current sample",
+      "Dump RS5k params (diagnostic)",
+      "Remove this instance",
+    }
+    action = pick_from_list("Edit: " .. cur_wav, choices)
+    if not action then return end
+  end
 
   if action == 1 then
     -- swap sample via native file dialog
@@ -1512,16 +1512,21 @@ local function show_main_menu(track)
   end
   close_sub()
 
-  -- Tweak submenu
+  -- Tweak submenu: each instance expands to its 6 actions
   if inst_count > 0 then
     open_sub(string.format("Tweak (%d)", inst_count))
     for i, inst in ipairs(instances) do
-      local info = inst.info
-      local idx  = i
-      add(
-        string.format("L%d %s — %s/%s", info.layer, note_name(info.note), info.drum_type, info.tag),
-        function() tweak_mode(track, idx) end
-      )
+      local info  = inst.info
+      local idx   = i
+      local label = string.format("L%d %s — %s/%s", info.layer, note_name(info.note), info.drum_type, info.tag)
+      open_sub(label)
+      add("Swap sample",          function() tweak_mode(track, idx, 1) end)
+      add("Edit volume / pan",    function() tweak_mode(track, idx, 2) end)
+      add("Edit pitch",           function() tweak_mode(track, idx, 3) end)
+      add("Preview",              function() tweak_mode(track, idx, 4) end)
+      add("Dump RS5k params",     function() tweak_mode(track, idx, 5) end)
+      add("Remove",               function() tweak_mode(track, idx, 6) end)
+      close_sub()
     end
     close_sub()
   else
