@@ -123,7 +123,8 @@ Set via `TrackFX_SetNamedConfigParm(track, fx_idx, "MODE", value)` (string value
 
 Source: jamesWalker55/reaper-scripting-5-index rs5k-tools/0.0.1/lua_modules/reaper-api/rs5k.lua
 
-**Pitch zones use MODE="0"** (freely configurable) with params 5+6 scaled by `zone_pitch_scale`.
+**Pitch zones use MODE="0"** (freely configurable) with params 5+6 set directly in semitones
+(`zone_lo_st` / `zone_hi_st`, default -7 / +10). RS5k interpolates linearly between them.
 Drums use MODE="1" (default, no need to set explicitly — but set anyway for safety).
 
 ### Finding/adding RS5k on track
@@ -148,19 +149,29 @@ Main entry: `main()` → select/create track → `show_main_menu(track)` loop.
 
 `show_main_menu` builds a structured gfx.showmenu with submenus and returns `(continue, track)`.
 Main menu items:
-1. Add assignment (full: note, layer, pitch zone, vol, pan, pitch)
-2. Quick assign (note + layer only)
-3. **Import selected** — submenu: "Import all" + one entry per selected media item
+1. **Add / assign sample** — `pick_source()` → `run_assign_dialog()` (10-field dialog)
+2. **Quick assign** — `pick_source()` → 2-field dialog (note + layer only)
+3. **Import selected (N)** — flat item; calls `import_selected_items_flow()` for batch
 4. **Load kit** — submenu: all 15 kits directly selectable
-5. **Tweak** — submenu: each instance → sub-submenu: Swap / Edit vol-pan / Edit pitch / Preview / Dump / Remove
-6. Randomize
-7. Switch track
-8. Exit
+5. **Tweak** — top-level "Assign to pitch zone (play note)" + per-instance sub-submenus:
+   Swap / Edit parameters / Preview / Dump / Remove
+6. **Randomize**
+7. **Exit**
 
 **gfx.showmenu submenu indexing:** `>header` and `<` closer items are NOT counted in return value. Use a separate `gfx_idx` counter (incremented only by real items) to map return values to actions. `open_sub`/`close_sub` only append to `parts[]`, never increment `gfx_idx`.
 
+**pick_from_list:** always prepends `#title` as disabled header item (screen reader announces it). Return value adjusted by -1 since header occupies index 1.
+
+**pick_source():** when timeline items selected, offers submenu "Browse file | From selected item"; otherwise goes straight to `browse_sample()`. Used by add, quick assign, swap, and retry loop in `run_assign_dialog`.
+
+**run_assign_dialog():** shared 10-field assign dialog + preview + keep/retry/discard loop.
+Fields: note, layer, zone_n, vol_db, pan_pct, pitch_st, zone_lo_st, zone_hi_st, attack, max_voices.
+`defs` table pre-populates any field. `force_new=true` skips existing-instance reuse in `assign_sample`.
+When zone_n>0: applies pitch zone (MODE=0, pitch_note_lo=zone_lo_st, pitch_note_hi=zone_hi_st).
+
 **Metadata:** stored via `SetProjExtState` keyed by FX GUID (`note|layer|drum_type|tag`).
 Scan: `scan_triaz_instances(track)` reads all RS5k metadata on track.
+Zone instances: metadata `note` = zone.mid (91/98/105); detected by matching PITCH_ZONES midpoints.
 
 **Preview flow:** `preview_wav(path)` → MB dialog blocks → `stop_preview()` on close.
 
@@ -179,7 +190,15 @@ HH Open behavior:
 - `obey_note_off = true` + `hh_open_release = true`
 - Sets param 27 (use_note_off_rel) = 1, param 26 = `HH_OPEN_RELEASE_NORM` (0.05 ≈ 50ms est.)
 
-Upper zones (E5–C7, MIDI 88–108): 3 × 7-note empty RS5k slots. drum_type="Zone". User fills via Add assignment.
+Upper zones (E5–C7, MIDI 88–108): 3 × 7-note empty RS5k slots. drum_type="Zone". User fills via:
+- Add / assign sample (enter zone # 1-3 in dialog; set zone_lo_st / zone_hi_st in semitones)
+- Tweak → Assign to pitch zone (play note) — plays a note to find instance, picks zone, sets lo/hi pitch
+
+### assign_to_zone_flow
+
+Top-level item in Tweak submenu. Captures played MIDI note via `MIDI_GetRecentInputEvent`,
+finds matching instance(s), picks PITCH_ZONES entry, asks for lo/hi pitch in semitones (default -7/+10),
+reconfigures RS5k in-place (note_lo/hi, pitch_note_lo/hi, MODE=0, metadata updated).
 
 ### Randomize (randomize_flow)
 

@@ -1700,14 +1700,16 @@ MAIN MENU — WHAT EACH ITEM DOES
 ---------------------------------
 
 ADD / ASSIGN SAMPLE
-  Opens the file browser so you can pick any WAV from the TRIAZ library.
-  Then asks for note, layer, pitch zone, volume, pan, and pitch shift in
-  one dialog. After assigning, it previews the sample and asks if you want
-  to keep it, try another, or discard.
+  First picks a source — if you have audio items selected on the timeline,
+  a menu offers "Browse file" or "From selected item". Otherwise goes
+  straight to the file browser.
+  Then shows a 10-field dialog: note, layer, pitch zone, volume dB, pan %,
+  pitch shift, zone pitch lo/hi (semitones), attack, max voices.
+  After assigning, previews the sample and asks: keep / try another / discard.
 
 QUICK ASSIGN
-  Same as above but only asks for note and layer — skips vol/pan/pitch.
-  Faster for simple assignments.
+  Same source picker, but only asks for note and layer. Faster for simple
+  assignments where you don't need vol/pan/pitch control.
 
 IMPORT SELECTED
   Batch-assigns all selected timeline audio items to RS5k. Each file gets
@@ -1719,19 +1721,22 @@ LOAD KIT
   Loads a full drum kit in one shot — 15 preset kits to choose from.
   Each kit fills notes 21–108 with kicks, snares, hats, toms, perc, and more.
   Toms are pitched and panned across the stereo field automatically.
-  Three empty "zones" at notes 88–108 (E5–C7) are left for you to fill with
-  pitched samples via Add/assign.
+  Three empty zone slots at notes 88–108 (E5–C7) are created for pitched
+  samples — assign to them via Add / assign sample (enter zone # in dialog).
 
 TWEAK
-  Top-level item:
+  Top-level item in the submenu:
     - Assign to pitch zone (play note)
-        Play a note to identify the instance, then pick a zone (E5-C7, MODE=0).
-        Useful when jamming — no need to know the exact note name.
-  Per-instance sub-menu (pick by label):
-    - Swap sample      Replace with a different WAV (file browser or timeline item)
-    - Edit parameters  Vol dB, pan %, pitch semitones, attack, max voices
+        Play a MIDI note to identify the instance, then pick a zone (E5-C7).
+        Set pitch at low and high note in semitones (default -7 / +10).
+        Useful when jamming — no need to navigate by label.
+  Per-instance sub-menu (each instance listed by label):
+    - Swap sample      Browse a new WAV (file browser or from selected item)
+    - Edit parameters  Full 10-field dialog pre-populated with current values.
+                       Detects if instance is a zone and restores zone # and
+                       pitch lo/hi so zone mode is preserved on re-submit.
     - Preview          Play the current sample
-    - Dump RS5k params Show all internal parameter values (diagnostic)
+    - Dump RS5k params All parameter values (message box + console output)
     - Remove           Delete this RS5k instance
 
 RANDOMIZE
@@ -1769,14 +1774,33 @@ Lower extras (notes 21-34): Perc Glitch, Layer, Noise, and Foley sounds.
 UPPER PITCH ZONES (notes 88-108)
 ---------------------------------
 Three empty RS5k slots are created at:
-  Zone 1: E5-A#5  (notes 88-94)
-  Zone 2: B5-F6   (notes 95-101)
-  Zone 3: F#6-C7  (notes 102-108)
+  Zone 1: E5-A#5  (notes 88-94,  center A#5 / MIDI 91)
+  Zone 2: B5-F6   (notes 95-101, center D#6 / MIDI 98)
+  Zone 3: F#6-C7  (notes 102-108, center A6  / MIDI 105)
 
-These are for pitched samples. Assign any TRIAZ WAV to one of these zones
-via "Add / assign sample", then choose the zone number in the dialog.
-The sample will pitch-shift automatically as you play different notes
-within the zone.
+These are for pitched samples. RS5k MODE=0 (freely configurable) lets you
+set the pitch offset at the lowest and highest note of the zone independently,
+with linear interpolation across all keys in between.
+
+To assign a sample to a zone:
+  Option A — Add / assign sample: enter zone # (1-3) in the dialog. Fields
+    "Zone: pitch at low note st" and "Zone: pitch at high note st" set the
+    semitone range. Default: -7 at low note, +10 at high note.
+  Option B — Tweak > Assign to pitch zone (play note): play the note of an
+    existing instance to identify it, then pick the target zone and set
+    lo/hi pitch values directly.
+
+To edit a zone later:
+  Tweak > (instance label) > Edit parameters — shows full dialog pre-filled
+  with current zone #, pitch lo/hi, vol/pan/pitch shift etc.
+  Changing zone # here moves it to a different zone range.
+
+PITCH VALUES EXPLAINED
+  "Pitch at low note" = semitone offset applied at the lowest key of the zone.
+  "Pitch at high note" = semitone offset at the highest key.
+  RS5k interpolates linearly between them across the zone's keys.
+  Example: lo=-7, hi=+10 gives a rising pitch sweep across the zone.
+  Negative lo + positive hi = sample pitched down at bottom, up at top.
 
 NOISE SAMPLES AND LOOPING
 --------------------------
