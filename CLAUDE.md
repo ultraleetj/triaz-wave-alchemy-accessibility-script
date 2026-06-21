@@ -103,7 +103,7 @@ Returns true but CF_Preview_Play then returns false when project is stopped.
 ```
 
 Currently mapped in `RS5K_PARAM`: volume=0, pan=1, gain_min_vel=2, note_lo=3, note_hi=4,
-loop=12, obey_note_off=11, pitch_st=15.
+loop=12, obey_note_off=11, pitch_st=15, release_note_off=26, use_note_off_rel=27.
 
 Normalization: `note/127` for note params, `(semitones+24)/48` for pitch.
 
@@ -128,38 +128,52 @@ reaper.TrackFX_AddByName(track, "reasamplomatic5000", false, -1)
 
 ## Script architecture (triaz_browser.lua)
 
-Main entry: `main()` → select/create track → action loop:
+Main entry: `main()` → select/create track → `show_main_menu(track)` loop.
+
+`show_main_menu` builds a structured gfx.showmenu with submenus and returns `(continue, track)`.
+Main menu items:
 1. Add assignment (full: note, layer, pitch zone, vol, pan, pitch)
-2. Quick assign (minimal: note + layer only)
-3. Import selected media items → assign to notes
-4. Load kit (15 preset kits)
-5. Tweak mode (edit existing RS5k instances)
+2. Quick assign (note + layer only)
+3. **Import selected** — submenu: "Import all" + one entry per selected media item
+4. **Load kit** — submenu: all 15 kits directly selectable
+5. **Tweak** — submenu: each instance → sub-submenu: Swap / Edit vol-pan / Edit pitch / Preview / Dump / Remove
 6. Randomize
 7. Switch track
+8. Exit
 
-**Metadata:** stored via `SetProjExtState` keyed by FX name (`note|layer|drum_type|tag`).
-Scan: `scan_triaz_instances(track)` reads all RS5k FX names + metadata on track.
+**gfx.showmenu submenu indexing:** `>header` and `<` closer items are NOT counted in return value. Use a separate `gfx_idx` counter (incremented only by real items) to map return values to actions. `open_sub`/`close_sub` only append to `parts[]`, never increment `gfx_idx`.
+
+**Metadata:** stored via `SetProjExtState` keyed by FX GUID (`note|layer|drum_type|tag`).
+Scan: `scan_triaz_instances(track)` reads all RS5k metadata on track.
 
 **Preview flow:** `preview_wav(path)` → MB dialog blocks → `stop_preview()` on close.
 
 ### Kit loader (load_kit_flow)
 
-Loads voices in order: rimshot (fixed) → kit voices (KIT_VOICE_ORDER) → toms (pitched) → fixed GM voices (KIT_FIXED_VOICES) → lower extras 21–34 (KIT_LOWER_VOICES) → 3 empty upper zones 88–108 (KIT_UPPER_ZONES).
+Accepts optional `kit_n` (pre-selected index from submenu) to skip internal picker.
+Wrapped in `PreventUIRefresh(1/-1)` — eliminates per-FX UI redraws (~15s for 56 instances).
+Loads: rimshot → kit voices → toms (pitched+panned) → fixed GM voices → lower extras 21–34 → 3 empty upper zones 88–108.
 
-Kit definitions mirror `generate_kits.py` exactly (primary + alt voices per kit).
-Tom notes {41,43,45,47,48,50} pitched via `pitch_st = note - 45` (Low Tom = center, 0 st).
-Upper zones (E5–C7, MIDI 88–108): 3 × 7-note empty RS5k slots, labeled "zone N (E5-A#5)" etc.
-Zones show in tweak mode as drum_type="Zone"; user fills via Add assignment flow.
+Tom behavior:
+- `TOM_PITCH_SCALE = 0.5` — pitch spread -2 to +3 st from center note A1 (MIDI 45)
+- `TOM_PAN_LOW = 0.25` (note 41, left) → `TOM_PAN_HIGH = 0.75` (note 50, right)
+- `load_voice()` accepts `opts = {pitch_scale, pan_list}` for per-note overrides
+
+HH Open behavior:
+- `obey_note_off = true` + `hh_open_release = true`
+- Sets param 27 (use_note_off_rel) = 1, param 26 = `HH_OPEN_RELEASE_NORM` (0.05 ≈ 50ms est.)
+
+Upper zones (E5–C7, MIDI 88–108): 3 × 7-note empty RS5k slots. drum_type="Zone". User fills via Add assignment.
 
 ### Randomize (randomize_flow)
 
 4 modes (skips Zone instances):
-1. **Single voice** — pick one instance, same drum_type/tag, random WAV + preview
-2. **Entire kit** — all voices, same drum_type/tag each, random WAV
-3. **Entire kit + tags** — all voices, random tag within same drum_type, random WAV
-4. **Full random** — all voices, random drum_type + tag + WAV
+1. **Single voice** — same type/tag, random WAV + preview
+2. **Entire kit** — same type/tag, new random WAV each voice
+3. **Entire kit + tags** — random tag within same drum type
+4. **Full random** — random type/tag/WAV every voice
 
-`math.randomseed(os.time())` called per invocation. Updates RS5k FILE0 + metadata.
+`math.randomseed(os.time())` per invocation. Updates FILE0 + metadata. Preserves HH Open release params on randomize.
 
 ---
 
@@ -244,7 +258,9 @@ All other drum types verified clean — no embedded loops.
 
 ## TODO
 
-### Pending
-- **HH Open release value** — `HH_OPEN_RELEASE_NORM = 0.05` is an estimate. Param 26 range unknown. Test: load kit, play HH Open, listen for fade vs hard cut. Adjust constant and redeploy if too long or too short.
-- **Tom pitch scale** — `TOM_PITCH_SCALE = 0.5` halves spread to ~-2/+3 st from center note 45. Adjust if still too wide/narrow.
-- **Tom pan spread** — `TOM_PAN_LOW = 0.25` (note 41, left), `TOM_PAN_HIGH = 0.75` (note 50, right). Adjust for wider/narrower stereo image.
+### Tunable constants (top of script)
+- `HH_OPEN_RELEASE_NORM = 0.05` — param 26 range unknown; test and adjust for ~50ms fade
+- `TOM_PITCH_SCALE = 0.5` — halves spread; adjust if still too wide/narrow
+- `TOM_PAN_LOW / TOM_PAN_HIGH = 0.25 / 0.75` — ±25% pan spread; adjust for preference
+
+### Future
