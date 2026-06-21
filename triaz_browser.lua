@@ -603,9 +603,11 @@ local function pick_from_list(title, items)
   if #items == 0 then reaper.MB("No items found.", title, 0); return nil end
   gfx.init(title, 0, 0, 0, 0, 0)
   gfx.x, gfx.y = 0, 0
-  local choice = gfx.showmenu(table.concat(items, "|"))
+  -- Disabled header item shows title as instruction; screen reader reads it before items.
+  -- gfx counts it as index 1, so real items start at 2 — subtract 1 from result.
+  local choice = gfx.showmenu("#" .. title .. "|" .. table.concat(items, "|"))
   gfx.quit()
-  return choice ~= 0 and choice or nil
+  return (choice > 1) and (choice - 1) or nil
 end
 
 local function ask_yes_no(msg, title)
