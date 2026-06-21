@@ -991,20 +991,23 @@ local function add_assignment_flow(track)
   for p in result:gmatch("[^,]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
   while #parts < 6 do parts[#parts + 1] = "0" end
 
-  -- Parse note
-  local target_note = tonumber(parts[1])
-  if not target_note then target_note = note_from_name(parts[1]) end
-  if not target_note or target_note < 0 or target_note > 127 then
-    reaper.MB("Invalid note: " .. (parts[1] or ""), "Error", 0); return
+  -- Parse pitch zone first — if zone is selected, note field is ignored entirely
+  local zone_n = tonumber(parts[3]) or 0
+  local zone = (zone_n >= 1 and zone_n <= #PITCH_ZONES) and PITCH_ZONES[zone_n] or nil
+
+  -- Parse note (skipped when zone is selected)
+  local target_note
+  if zone then
+    target_note = zone.mid
+  else
+    target_note = tonumber(parts[1]) or note_from_name(parts[1] or "")
+    if not target_note or target_note < 0 or target_note > 127 then
+      reaper.MB("Invalid note: " .. (parts[1] or ""), "Error", 0); return
+    end
   end
 
   -- Parse layer
   local layer = math.max(1, math.min(3, tonumber(parts[2]) or 1))
-
-  -- Parse pitch zone
-  local zone_n = tonumber(parts[3]) or 0
-  local zone = (zone_n >= 1 and zone_n <= #PITCH_ZONES) and PITCH_ZONES[zone_n] or nil
-  if zone then target_note = zone.mid end
 
   -- Parse vol/pan/pitch
   local vol_db  = tonumber(parts[4]) or 0
