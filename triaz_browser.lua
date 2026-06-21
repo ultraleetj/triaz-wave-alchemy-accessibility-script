@@ -1581,8 +1581,9 @@ TIPS FOR SCREEN READER USERS
 - All data entry uses standard REAPER input dialogs (Tab between fields).
 - Preview dialogs are standard message boxes — press Enter or Space to close
   (this also stops playback).
-- The "Dump RS5k params" option in Tweak prints all parameter values to the
-  REAPER console and a message box — useful for checking what is loaded.
+- The "Dump RS5k params" option in Tweak shows all parameter values in a
+  message box and also in the ReaScript console output window
+  (open it via View > ReaScript console output in REAPER's menu bar).
 
 TRACK SETUP
 -----------
