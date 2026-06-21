@@ -1550,36 +1550,122 @@ local function scan_non_zone_instances(track)
 end
 
 local function cycle_samples_flow(track)
-  local voices = scan_non_zone_instances(track)
-  if #voices == 0 then
+  -- Partition: toms group, assigned zones, and individual voices
+  local zone_mids = {}
+  for _, z in ipairs(PITCH_ZONES) do zone_mids[z.mid] = true end
+
+  local tom_group  = {}   -- all Tom instances (cycle together)
+  local zone_group = {}   -- assigned zone instances (note == PITCH_ZONES.mid)
+  local solo_list  = {}   -- everything else
+  for _, v in ipairs(scan_non_zone_instances(track)) do
+    if v.info.drum_type == "Tom" then
+      tom_group[#tom_group + 1] = v
+    elseif zone_mids[v.info.note] then
+      zone_group[#zone_group + 1] = v
+    else
+      solo_list[#solo_list + 1] = v
+    end
+  end
+
+  -- entries: {label, etype, instances, drum_type, tag, cur_wav}
+  local entries = {}
+
+  local function get_file0(fx_idx)
+    local ok_f, f = reaper.TrackFX_GetNamedConfigParm(track, fx_idx, "FILE0")
+    return (ok_f and f ~= "") and (f:match("[^\\/]+$") or f) or "?"
+  end
+
+  for _, v in ipairs(solo_list) do
+    local info    = v.info
+    local cur_wav = get_file0(v.fx_idx)
+    local tag     = (info.tag ~= "" and info.tag ~= "(root)") and info.tag or ""
+    local lbl     = note_name(info.note) .. "  " .. info.drum_type
+    if tag ~= "" then lbl = lbl .. " / " .. tag end
+    entries[#entries + 1] = {
+      label     = lbl .. " — " .. cur_wav,
+      etype     = "solo",
+      instances = {v},
+      drum_type = info.drum_type,
+      tag       = tag,
+      cur_wav   = cur_wav,
+    }
+  end
+
+  if #tom_group > 0 then
+    local v0      = tom_group[1]
+    local cur_wav = get_file0(v0.fx_idx)
+    local tag     = (v0.info.tag ~= "" and v0.info.tag ~= "(root)") and v0.info.tag or ""
+    -- Show note range of grouped toms
+    local lo_note = tom_group[1].info.note
+    local hi_note = tom_group[#tom_group].info.note
+    local note_rng = note_name(lo_note) .. "–" .. note_name(hi_note)
+    local lbl = note_rng .. "  Tom" .. (tag ~= "" and " / " .. tag or "")
+    entries[#entries + 1] = {
+      label     = lbl .. " — " .. cur_wav,
+      etype     = "toms",
+      instances = tom_group,
+      drum_type = "Tom",
+      tag       = tag,
+      cur_wav   = cur_wav,
+    }
+  end
+
+  if #zone_group > 0 then
+    entries[#entries + 1] = {
+      label     = "Pitch Zones (" .. #zone_group .. " assigned)",
+      etype     = "zones",
+      instances = zone_group,
+    }
+  end
+
+  if #entries == 0 then
     reaper.MB("No samples loaded on this track.", "Cycle Samples", 0)
     return
   end
 
-  -- Build labels; store FILE0 filenames to avoid a second API call after pick
-  local labels   = {}
-  local cur_wavs = {}
-  for _, v in ipairs(voices) do
-    local info = v.info
-    local ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, v.fx_idx, "FILE0")
-    local cur_wav = (ok_f and cur_file ~= "") and (cur_file:match("[^\\/]+$") or cur_file) or "?"
-    cur_wavs[#cur_wavs + 1] = cur_wav
-    local lbl = info.drum_type
-    if info.tag and info.tag ~= "" and info.tag ~= "(root)" then
-      lbl = lbl .. " / " .. info.tag
-    end
-    labels[#labels + 1] = lbl .. " — " .. cur_wav
-  end
+  local labels = {}
+  for _, e in ipairs(entries) do labels[#labels + 1] = e.label end
 
   local pick = pick_from_list("Cycle samples — pick voice", labels)
   if not pick then return end
 
-  local inst      = voices[pick]
-  local fx_idx    = inst.fx_idx
-  local info      = inst.info
-  local drum_type = info.drum_type
-  local current_tag = (info.tag and info.tag ~= "(root)") and info.tag or ""
-  local current_wav = cur_wavs[pick]
+  local entry = entries[pick]
+
+  -- Zones: sub-pick which zone then enter cycle loop for that one
+  if entry.etype == "zones" then
+    local zlabels = {}
+    for _, v in ipairs(entry.instances) do
+      local cur_wav = get_file0(v.fx_idx)
+      local zn = "Zone ?"
+      for zi, z in ipairs(PITCH_ZONES) do
+        if v.info.note == z.mid then
+          zn = "Zone " .. zi .. " (" .. note_name(z.lo) .. "–" .. note_name(z.hi) .. ")"
+          break
+        end
+      end
+      local tag = (v.info.tag ~= "" and v.info.tag ~= "(root)") and v.info.tag or ""
+      local lbl = zn .. "  " .. v.info.drum_type
+      if tag ~= "" then lbl = lbl .. " / " .. tag end
+      zlabels[#zlabels + 1] = lbl .. " — " .. cur_wav
+    end
+    local zpick = pick_from_list("Pick zone", zlabels)
+    if not zpick then return end
+    local zv = entry.instances[zpick]
+    local tag = (zv.info.tag ~= "" and zv.info.tag ~= "(root)") and zv.info.tag or ""
+    entry = {
+      etype     = "solo",
+      instances = {zv},
+      drum_type = zv.info.drum_type,
+      tag       = tag,
+      cur_wav   = get_file0(zv.fx_idx),
+    }
+  end
+
+  -- ── Cycle loop ───────────────────────────────────────────────────────────────
+  local drum_type   = entry.drum_type
+  local current_tag = entry.tag
+  local current_wav = entry.cur_wav
+  local instances   = entry.instances
 
   local function get_wavs_for_tag(tag)
     local path = TRIAZ_BASE .. drum_type
@@ -1595,22 +1681,22 @@ local function cycle_samples_flow(track)
 
   local is_hh_open = (drum_type == "HiHat Open")
 
-  local function swap_to(wav_name, full_path, tag)
+  local function swap_group(wav_name, full_path, tag)
     local is_noise = (drum_type == "Noise") and NOISE_LOOP_FILES[wav_name]
     local disp_tag = (tag ~= "" and tag ~= "(root)") and tag or "(root)"
-    configure_rs5k(track, fx_idx, {
-      path            = full_path,
-      no_loop         = is_noise,
-      obey_note_off   = is_noise or is_hh_open,
-      hh_open_release = is_hh_open,
-      fx_name         = make_fx_name(info.note, info.layer, drum_type, disp_tag),
-    })
-    save_meta(track, fx_idx, info.note, info.layer, drum_type, disp_tag)
+    for _, v in ipairs(instances) do
+      configure_rs5k(track, v.fx_idx, {
+        path            = full_path,
+        no_loop         = is_noise,
+        obey_note_off   = is_noise or is_hh_open,
+        hh_open_release = is_hh_open,
+        fx_name         = make_fx_name(v.info.note, v.info.layer, drum_type, disp_tag),
+      })
+      save_meta(track, v.fx_idx, v.info.note, v.info.layer, drum_type, disp_tag)
+    end
   end
 
   local all_tags = (drum_type ~= "Noise") and list_dirs(TRIAZ_BASE .. drum_type) or {}
-
-  -- Build menu items once; order defines the choice constants below
   local IDX_PREV = 1; local IDX_NEXT = 2; local IDX_PICK = 3
   local IDX_TAG  = #all_tags > 0 and 4 or nil
   local menu_items = {"< Previous", "> Next", "Pick from list"}
@@ -1630,14 +1716,14 @@ local function cycle_samples_flow(track)
       if #wavs > 0 then
         current_idx = (current_idx - 2) % #wavs + 1
         current_wav = wavs[current_idx]
-        swap_to(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
+        swap_group(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
       end
 
     elseif choice == IDX_NEXT then
       if #wavs > 0 then
         current_idx = current_idx % #wavs + 1
         current_wav = wavs[current_idx]
-        swap_to(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
+        swap_group(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
       end
 
     elseif choice == IDX_PICK then
@@ -1647,7 +1733,7 @@ local function cycle_samples_flow(track)
         if n then
           current_idx = n
           current_wav = wavs[current_idx]
-          swap_to(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
+          swap_group(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
         end
       end
 
@@ -1659,7 +1745,7 @@ local function cycle_samples_flow(track)
         current_idx = 1
         if #wavs > 0 then
           current_wav = wavs[current_idx]
-          swap_to(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
+          swap_group(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
         end
       end
     end
@@ -2034,6 +2120,7 @@ local function show_main_menu(track)
   if inst_count > 0 then
     open_sub(string.format("Tweak (%d)", inst_count))
     add("Assign to pitch zone (play note)", function() assign_to_zone_flow(track) end)
+    add("Cycle samples",                    function() cycle_samples_flow(track) end)
     for i, inst in ipairs(instances) do
       local info  = inst.info
       local idx   = i
@@ -2051,7 +2138,6 @@ local function show_main_menu(track)
     add("#Tweak (0 instances)")
   end
 
-  add("Cycle samples",  function() cycle_samples_flow(track) end)
   add("Randomize",      function() randomize_flow(track) end)
   add("Help",           function() show_help() end)
   local exit_pos   = add("Close menu")
