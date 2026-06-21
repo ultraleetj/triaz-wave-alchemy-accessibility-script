@@ -589,6 +589,38 @@ local function ask_yes_no(msg, title)
   return reaper.MB(msg, title or "TRIAZ Browser", 4) == 6
 end
 
+-- Show a gate dialog, then read the most recent MIDI input event.
+-- Returns MIDI note number (0-127) or nil if no note-on found.
+local function capture_midi_note()
+  reaper.MB(
+    "Play a MIDI note now, then click OK.\nThe last note played will be used.",
+    "Capture Note from Keyboard", 0
+  )
+  local retval, buf = reaper.MIDI_GetRecentInputEvent(0)
+  if retval > 0 and buf and #buf >= 3 then
+    local st  = buf:byte(1)
+    local num = buf:byte(2)
+    local vel = buf:byte(3)
+    if st >= 0x90 and st <= 0x9F and vel > 0 then return num end
+    if st >= 0x80 and st <= 0x8F then return num end
+  end
+  return nil
+end
+
+-- Offer MIDI capture or fall back to GM suggestion. Returns note name string.
+local function pick_note_default(gm_note)
+  local suggested = note_name(gm_note)
+  local choice = pick_from_list("Set target note", {
+    "Play a note on the MIDI keyboard",
+    "Use suggested: " .. suggested,
+  })
+  if choice == 1 then
+    local n = capture_midi_note()
+    if n then return note_name(n) end
+  end
+  return suggested
+end
+
 local function ask_string(caption, label, default)
   local ok, val = reaper.GetUserInputs(caption, 1, label .. ":", default or "")
   if not ok or val == "" then return nil end
@@ -957,7 +989,7 @@ local function add_assignment_flow(track)
     "Pan % (-100=L  0=C  100=R)",
     "Pitch shift semitones (-24 to +24)",
   }, ",")
-  local defaults = note_name(gm_note) .. ",1,0,0,0,0"
+  local defaults = pick_note_default(gm_note) .. ",1,0,0,0,0"
 
   local ok, result = reaper.GetUserInputs(
     "Assign: " .. wav_name, 6, captions, defaults
@@ -1192,10 +1224,11 @@ local function quick_assign_flow(track)
   if not wav_name then return end
 
   local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
+  local note_default = pick_note_default(gm_note)
   local ok, result = reaper.GetUserInputs(
     "Quick Assign: " .. wav_name, 2,
     "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
-    note_name(gm_note) .. ",1"
+    note_default .. ",1"
   )
   if not ok then return end
 
@@ -1271,10 +1304,11 @@ local function import_selected_items_flow(track)
     tag       = tag       or ""
 
     local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
+    local note_default = pick_note_default(gm_note)
     local ok, result = reaper.GetUserInputs(
       string.format("Item %d/%d: %s", idx, #items, wav_name), 2,
       "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
-      note_name(gm_note) .. ",1"
+      note_default .. ",1"
     )
     if not ok then break end
 
@@ -1310,10 +1344,11 @@ local function import_item_flow(track, full_path)
   tag       = tag       or ""
 
   local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
+  local note_default = pick_note_default(gm_note)
   local ok, result = reaper.GetUserInputs(
     wav_name, 2,
     "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
-    note_name(gm_note) .. ",1"
+    note_default .. ",1"
   )
   if not ok then return end
 
@@ -1462,10 +1497,9 @@ keyboard or in a MIDI item, that sample plays.
 Everything works through standard REAPER dialogs — no drawn windows — so it
 is fully accessible with a screen reader.
 
-TIP: To read this help text in full, use object navigation to explore the
-dialog. In NVDA: NVDA+numpad2/4/6/8 to move between objects, NVDA+numpad5
-to read the current object. In JAWS: use the virtual cursor (insert+Z to
-toggle) or read window text with insert+B. In Narrator: Caps+arrow keys.
+TIP: To read this help text in full, use your screen reader's object
+navigation feature to explore the dialog. This lets you move through
+individual elements of the window and have their content read aloud.
 
 HOW THE LIBRARY IS ORGANIZED
 -----------------------------
