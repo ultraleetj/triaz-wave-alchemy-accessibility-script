@@ -1697,19 +1697,25 @@ local function cycle_samples_flow(track)
   end
 
   local all_tags = (drum_type ~= "Noise") and list_dirs(TRIAZ_BASE .. drum_type) or {}
-  local IDX_PREV = 1; local IDX_NEXT = 2; local IDX_PICK = 3
-  local IDX_TAG  = #all_tags > 0 and 4 or nil
-  local menu_items = {"< Previous", "> Next", "Pick from list"}
-  if IDX_TAG then menu_items[#menu_items + 1] = "Change tag" end
-  menu_items[#menu_items + 1] = "Done"
-  local IDX_DONE = #menu_items
+  -- Fixed nav items; WAVs appended inline each iteration (current marked with *)
+  local IDX_PREV = 1; local IDX_NEXT = 2
+  local IDX_TAG  = #all_tags > 0 and 3 or nil
+  local IDX_DONE = IDX_TAG and 4 or 3
+  local WAV_OFFSET = IDX_DONE  -- wav items start at IDX_DONE + 1
 
   while true do
     local header = drum_type
     if current_tag ~= "" then header = header .. " / " .. current_tag end
     header = header .. " — " .. current_wav
 
-    local choice = pick_from_list(header, menu_items)
+    local items = {"< Previous", "> Next"}
+    if IDX_TAG then items[#items + 1] = "Change tag" end
+    items[#items + 1] = "Done"
+    for i, w in ipairs(wavs) do
+      items[#items + 1] = (i == current_idx and "* " or "") .. w
+    end
+
+    local choice = pick_from_list(header, items)
     if not choice or choice == IDX_DONE then break end
 
     if choice == IDX_PREV then
@@ -1726,17 +1732,6 @@ local function cycle_samples_flow(track)
         swap_group(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
       end
 
-    elseif choice == IDX_PICK then
-      if #wavs > 0 then
-        local tag_label = drum_type .. (current_tag ~= "" and " / " .. current_tag or "")
-        local n = pick_from_list(tag_label, wavs)
-        if n then
-          current_idx = n
-          current_wav = wavs[current_idx]
-          swap_group(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
-        end
-      end
-
     elseif IDX_TAG and choice == IDX_TAG then
       local t = pick_from_list("Tag — " .. drum_type, all_tags)
       if t then
@@ -1747,6 +1742,14 @@ local function cycle_samples_flow(track)
           current_wav = wavs[current_idx]
           swap_group(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
         end
+      end
+
+    elseif choice > IDX_DONE then
+      local wav_pick = choice - WAV_OFFSET
+      if wav_pick >= 1 and wav_pick <= #wavs then
+        current_idx = wav_pick
+        current_wav = wavs[current_idx]
+        swap_group(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
       end
     end
   end
