@@ -1466,21 +1466,23 @@ local function show_main_menu(track)
     end
   end
 
-  local parts   = {}
-  local actions = {}
+  local parts   = {}   -- all tokens in the menu string (including > and <)
+  local actions = {}   -- indexed by gfx return value; > and < are NOT counted by gfx
+  local gfx_idx = 0    -- tracks what gfx.showmenu will return for the next real item
 
+  -- Real selectable item: increments gfx_idx, records action, returns gfx index.
   local function add(label, fn)
-    parts[#parts + 1]   = label
-    actions[#actions + 1] = fn or false
-    return #parts   -- returns position of just-added item
+    parts[#parts + 1] = label
+    gfx_idx = gfx_idx + 1
+    actions[gfx_idx] = fn or false
+    return gfx_idx
   end
+  -- Submenu header/closer: structural only — gfx does NOT count these in return value.
   local function open_sub(label)
-    parts[#parts + 1]   = ">" .. label
-    actions[#actions + 1] = false
+    parts[#parts + 1] = ">" .. label
   end
   local function close_sub()
-    parts[#parts + 1]   = "<"
-    actions[#actions + 1] = false
+    parts[#parts + 1] = "<"
   end
 
   add("Add / assign sample", function() add_assignment_flow(track) end)
