@@ -838,25 +838,27 @@ end
 
 -- ── Tweak mode: edit existing instances ──────────────────────────────────────
 
-local function tweak_mode(track)
+-- inst_n: pre-selected instance index (from submenu); nil = show picker dialog
+local function tweak_mode(track, inst_n)
   local instances = scan_triaz_instances(track)
   if #instances == 0 then
     reaper.MB("No TRIAZ RS5k instances found on this track.", "Tweak", 0)
     return
   end
 
-  -- Build display list
-  local labels = {}
-  for _, inst in ipairs(instances) do
-    local i = inst.info
-    labels[#labels + 1] = string.format(
-      "L%d %s — %s/%s",
-      i.layer, note_name(i.note), i.drum_type, i.tag
-    )
+  local n = inst_n
+  if not n then
+    local labels = {}
+    for _, inst in ipairs(instances) do
+      local i = inst.info
+      labels[#labels + 1] = string.format(
+        "L%d %s — %s/%s",
+        i.layer, note_name(i.note), i.drum_type, i.tag
+      )
+    end
+    n = pick_from_list("TRIAZ Instances", labels)
+    if not n then return end
   end
-
-  local n = pick_from_list("TRIAZ Instances", labels, "Select instance to edit")
-  if not n then return end
 
   local inst = instances[n]
   local fx_idx = inst.fx_idx
@@ -1092,11 +1094,15 @@ local function load_voice(track, drum_type, tag, notes, pitch_center, stats, opt
   end
 end
 
-local function load_kit_flow(track)
-  local kit_names = {}
-  for _, k in ipairs(KITS) do kit_names[#kit_names + 1] = k.name end
-  local n = pick_from_list("Load Kit", kit_names)
-  if not n then return end
+-- kit_n: pre-selected kit index (from submenu); nil = show picker dialog
+local function load_kit_flow(track, kit_n)
+  local n = kit_n
+  if not n then
+    local kit_names = {}
+    for _, k in ipairs(KITS) do kit_names[#kit_names + 1] = k.name end
+    n = pick_from_list("Load Kit", kit_names)
+    if not n then return end
+  end
   local kit = KITS[n]
 
   local existing = scan_triaz_instances(track)
@@ -1295,6 +1301,38 @@ local function import_selected_items_flow(track)
   end
 end
 
+-- ── Import single item (used by main menu import submenu) ────────────────────
+
+local function import_item_flow(track, full_path)
+  local wav_name = full_path:match("[^\\/]+$") or full_path
+  local drum_type, tag = parse_triaz_path(full_path)
+  drum_type = drum_type or "Unknown"
+  tag       = tag       or ""
+
+  local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
+  local ok, result = reaper.GetUserInputs(
+    wav_name, 2,
+    "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
+    note_name(gm_note) .. ",1"
+  )
+  if not ok then return end
+
+  local note, layer = parse_note_layer(result)
+  if not note then reaper.MB("Invalid note.", "Error", 0); return end
+
+  local assign_ok, fx_idx = assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, nil)
+  if not assign_ok then return end
+
+  preview_wav(full_path)
+  local res = reaper.MB(
+    string.format("%s\nNote: %s  L%d\n\nYes = keep   No = discard",
+      wav_name, note_name(note), layer),
+    "Keep?", 4
+  )
+  stop_preview()
+  if res ~= 6 then remove_rs5k(track, fx_idx) end
+end
+
 -- ── Randomize ────────────────────────────────────────────────────────────────
 
 local function random_wav_from(drum_type, tag)
@@ -1407,54 +1445,130 @@ local function randomize_flow(track)
   end
 end
 
+-- ── Main menu (structured with submenus) ─────────────────────────────────────
+
+-- Builds menu string + parallel action list, shows it, runs chosen action.
+-- Returns: continue (bool), track (possibly updated by Switch track).
+local function show_main_menu(track)
+  local instances  = scan_triaz_instances(track)
+  local inst_count = #instances
+
+  -- Collect selectable media items for import submenu
+  local sel_paths = {}
+  local sel_count = reaper.CountSelectedMediaItems(0)
+  for i = 0, sel_count - 1 do
+    local item = reaper.GetSelectedMediaItem(0, i)
+    local take  = item and reaper.GetActiveTake(item)
+    if take and not reaper.TakeIsMIDI(take) then
+      local src  = reaper.GetMediaItemTake_Source(take)
+      local path = src and reaper.GetMediaSourceFileName(src, "")
+      if path and path ~= "" then sel_paths[#sel_paths + 1] = path end
+    end
+  end
+
+  local parts   = {}
+  local actions = {}
+
+  local function item(label, fn)
+    parts[#parts + 1]   = label
+    actions[#actions + 1] = fn
+  end
+  local function open_sub(label)
+    parts[#parts + 1]   = ">" .. label
+    actions[#actions + 1] = false
+  end
+  local function close_sub()
+    parts[#parts + 1]   = "<"
+    actions[#actions + 1] = false
+  end
+
+  item("Add / assign sample", function() add_assignment_flow(track) end)
+  item("Quick assign",        function() quick_assign_flow(track) end)
+
+  -- Import submenu
+  if #sel_paths > 0 then
+    open_sub(string.format("Import selected (%d)", #sel_paths))
+    if #sel_paths > 1 then
+      item("Import all (sequential)", function() import_selected_items_flow(track) end)
+    end
+    for _, path in ipairs(sel_paths) do
+      local name = path:match("[^\\/]+$") or path
+      local p    = path
+      item(name, function() import_item_flow(track, p) end)
+    end
+    close_sub()
+  else
+    item("#Import selected (0)", false)
+  end
+
+  -- Load kit submenu
+  open_sub("Load kit")
+  for i, k in ipairs(KITS) do
+    local idx = i
+    item(k.name, function() load_kit_flow(track, idx) end)
+  end
+  close_sub()
+
+  -- Tweak submenu
+  if inst_count > 0 then
+    open_sub(string.format("Tweak (%d)", inst_count))
+    for i, inst in ipairs(instances) do
+      local info = inst.info
+      local idx  = i
+      item(
+        string.format("L%d %s — %s/%s", info.layer, note_name(info.note), info.drum_type, info.tag),
+        function() tweak_mode(track, idx) end
+      )
+    end
+    close_sub()
+  else
+    item("#Tweak (0 instances)", false)
+  end
+
+  item("Randomize",    function() randomize_flow(track) end)
+  item("Switch track", false)   -- handled specially below
+  item("Exit",         false)   -- handled specially below
+
+  gfx.init("TRIAZ RS5k Browser", 0, 0, 0, 0, 0)
+  gfx.x, gfx.y = 0, 0
+  local choice = gfx.showmenu(table.concat(parts, "|"))
+  gfx.quit()
+
+  if choice == 0 then return true, track end  -- escaped = stay open
+
+  -- Find "Switch track" and "Exit" positions dynamically
+  local switch_pos, exit_pos = 0, 0
+  for i, p in ipairs(parts) do
+    if p == "Switch track" then switch_pos = i end
+    if p == "Exit"         then exit_pos   = i end
+  end
+
+  if choice == exit_pos then return false, track end
+
+  if choice == switch_pos then
+    local new_track = select_track()
+    return true, new_track or track
+  end
+
+  local fn = actions[choice]
+  if fn then fn() end
+  return true, track
+end
+
 -- ── Main ──────────────────────────────────────────────────────────────────────
 
 local function main()
   reaper.Undo_BeginBlock()
 
-  -- Track selection
   local track = select_track()
   if not track then
     reaper.Undo_EndBlock("TRIAZ Browser (cancelled)", -1)
     return
   end
 
-  -- Main menu loop
-  while true do
-    local instances = scan_triaz_instances(track)
-    local inst_count = #instances
-
-    local sel_count = reaper.CountSelectedMediaItems(0)
-    local menu_items = {
-      "Add / assign sample (full params)",
-      "Quick assign (browse + note only)",
-      string.format("Import selected items (%d selected)", sel_count),
-      "Load kit preset (15 kits)",
-      string.format("Tweak existing (%d instance%s)", inst_count, inst_count == 1 and "" or "s"),
-      "Randomize",
-      "Switch track",
-      "Exit",
-    }
-
-    local choice = pick_from_list("TRIAZ RS5k Browser", menu_items)
-    if not choice or choice == 8 then break end
-
-    if choice == 1 then
-      add_assignment_flow(track)
-    elseif choice == 2 then
-      quick_assign_flow(track)
-    elseif choice == 3 then
-      import_selected_items_flow(track)
-    elseif choice == 4 then
-      load_kit_flow(track)
-    elseif choice == 5 then
-      tweak_mode(track)
-    elseif choice == 6 then
-      randomize_flow(track)
-    elseif choice == 7 then
-      local new_track = select_track()
-      if new_track then track = new_track end
-    end
+  local keep_going = true
+  while keep_going do
+    keep_going, track = show_main_menu(track)
   end
 
   reaper.Undo_EndBlock("TRIAZ Browser", -1)
