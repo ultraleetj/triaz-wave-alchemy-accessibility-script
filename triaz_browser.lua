@@ -1045,7 +1045,8 @@ local function load_voice(track, drum_type, tag, notes, pitch_center, stats)
   local wav, path = pick_kit_wav(drum_type, resolved_tag)
   if not wav then stats.failed = stats.failed + 1; return end
 
-  local is_noise = (drum_type == "Noise") and NOISE_LOOP_FILES[wav]
+  local is_noise   = (drum_type == "Noise") and NOISE_LOOP_FILES[wav]
+  local is_hh_open = (drum_type == "HiHat Open")
   local display_tag = (resolved_tag ~= "") and resolved_tag or "(root)"
 
   for _, note in ipairs(notes) do
@@ -1059,7 +1060,7 @@ local function load_voice(track, drum_type, tag, notes, pitch_center, stats)
         volume        = 0.8,
         pan           = 0.5,
         no_loop       = is_noise,
-        obey_note_off = is_noise,  -- Noise: stop on note-off; drums: play to end
+        obey_note_off = is_noise or is_hh_open,  -- Noise + HH Open stop on note-off
         fx_name       = make_fx_name(note, 1, drum_type, display_tag),
         meta          = {note=note, layer=1, drum_type=drum_type, tag=display_tag},
       })
