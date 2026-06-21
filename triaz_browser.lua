@@ -815,27 +815,7 @@ end
 -- ── Track selection ───────────────────────────────────────────────────────────
 
 local function select_track()
-  -- Option 1: use selected track
-  local sel = reaper.GetSelectedTrack(0, 0)
-  if sel then
-    local ok, name = reaper.GetTrackName(sel, "")
-    if ask_yes_no(
-      "Use selected track: " .. (name or "?") .. "\n\nYes = use it, No = create new",
-      "Track"
-    ) then
-      return sel
-    end
-  end
-
-  -- Option 2: create new track
-  local track_name = ask_string("New Track", "Track name", "TRIAZ Drums")
-  if not track_name then return nil end
-
-  local track_count = reaper.CountTracks(0)
-  reaper.InsertTrackAtIndex(track_count, true)
-  local new_track = reaper.GetTrack(0, track_count)
-  reaper.GetSetMediaTrackInfo_String(new_track, "P_NAME", track_name, true)
-  return new_track
+  return reaper.GetSelectedTrack(0, 0)
 end
 
 -- ── RS5k param diagnostic ────────────────────────────────────────────────────
@@ -2207,7 +2187,8 @@ local function main()
 
   local track = select_track()
   if not track then
-    reaper.Undo_EndBlock("TRIAZ Browser (cancelled)", -1)
+    reaper.MB("Select a track first.", "TRIAZ Browser", 0)
+    reaper.Undo_EndBlock("TRIAZ Browser (no track)", -1)
     return
   end
 
