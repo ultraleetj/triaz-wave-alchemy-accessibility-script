@@ -1676,7 +1676,7 @@ TRACK SETUP
 When the script starts, it asks which track to use:
   - Yes = use the currently selected track
   - No  = create a new track (you name it)
-"Switch track" in the menu lets you move to a different track mid-session.
+To work on a different track, close the menu and re-run the script.
 
 OVERWRITING A KIT
 -----------------
@@ -1709,7 +1709,7 @@ end
 -- ── Main menu (structured with submenus) ─────────────────────────────────────
 
 -- Builds menu string + parallel action list, shows it, runs chosen action.
--- Returns: continue (bool), track (possibly updated by Switch track).
+-- Returns: continue (bool), track.
 local function show_main_menu(track)
   local instances  = scan_triaz_instances(track)
   local inst_count = #instances
