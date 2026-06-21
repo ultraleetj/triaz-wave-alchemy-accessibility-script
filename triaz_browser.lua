@@ -1541,24 +1541,29 @@ end
 
 -- ── Cycle samples ────────────────────────────────────────────────────────────
 
-local function cycle_samples_flow(track)
-  local instances = scan_triaz_instances(track)
+local function scan_non_zone_instances(track)
   local voices = {}
-  for _, inst in ipairs(instances) do
-    if inst.info.drum_type ~= "Zone" then
-      voices[#voices + 1] = inst
-    end
+  for _, inst in ipairs(scan_triaz_instances(track)) do
+    if inst.info.drum_type ~= "Zone" then voices[#voices + 1] = inst end
   end
+  return voices
+end
+
+local function cycle_samples_flow(track)
+  local voices = scan_non_zone_instances(track)
   if #voices == 0 then
     reaper.MB("No samples loaded on this track.", "Cycle Samples", 0)
     return
   end
 
-  local labels = {}
+  -- Build labels; store FILE0 filenames to avoid a second API call after pick
+  local labels   = {}
+  local cur_wavs = {}
   for _, v in ipairs(voices) do
     local info = v.info
     local ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, v.fx_idx, "FILE0")
     local cur_wav = (ok_f and cur_file ~= "") and (cur_file:match("[^\\/]+$") or cur_file) or "?"
+    cur_wavs[#cur_wavs + 1] = cur_wav
     local lbl = info.drum_type
     if info.tag and info.tag ~= "" and info.tag ~= "(root)" then
       lbl = lbl .. " / " .. info.tag
@@ -1569,14 +1574,12 @@ local function cycle_samples_flow(track)
   local pick = pick_from_list("Cycle samples — pick voice", labels)
   if not pick then return end
 
-  local inst     = voices[pick]
-  local fx_idx   = inst.fx_idx
-  local info     = inst.info
+  local inst      = voices[pick]
+  local fx_idx    = inst.fx_idx
+  local info      = inst.info
   local drum_type = info.drum_type
   local current_tag = (info.tag and info.tag ~= "(root)") and info.tag or ""
-
-  local ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, fx_idx, "FILE0")
-  local current_wav = (ok_f and cur_file ~= "") and (cur_file:match("[^\\/]+$") or "") or ""
+  local current_wav = cur_wavs[pick]
 
   local function get_wavs_for_tag(tag)
     local path = TRIAZ_BASE .. drum_type
@@ -1590,10 +1593,11 @@ local function cycle_samples_flow(track)
     if w == current_wav then current_idx = i; break end
   end
 
+  local is_hh_open = (drum_type == "HiHat Open")
+
   local function swap_to(wav_name, full_path, tag)
-    local is_noise   = (drum_type == "Noise") and NOISE_LOOP_FILES[wav_name]
-    local is_hh_open = (drum_type == "HiHat Open")
-    local disp_tag   = (tag ~= "" and tag ~= "(root)") and tag or "(root)"
+    local is_noise = (drum_type == "Noise") and NOISE_LOOP_FILES[wav_name]
+    local disp_tag = (tag ~= "" and tag ~= "(root)") and tag or "(root)"
     configure_rs5k(track, fx_idx, {
       path            = full_path,
       no_loop         = is_noise,
@@ -1606,34 +1610,37 @@ local function cycle_samples_flow(track)
 
   local all_tags = (drum_type ~= "Noise") and list_dirs(TRIAZ_BASE .. drum_type) or {}
 
+  -- Build menu items once; order defines the choice constants below
+  local IDX_PREV = 1; local IDX_NEXT = 2; local IDX_PICK = 3
+  local IDX_TAG  = #all_tags > 0 and 4 or nil
+  local menu_items = {"< Previous", "> Next", "Pick from list"}
+  if IDX_TAG then menu_items[#menu_items + 1] = "Change tag" end
+  menu_items[#menu_items + 1] = "Done"
+  local IDX_DONE = #menu_items
+
   while true do
     local header = drum_type
     if current_tag ~= "" then header = header .. " / " .. current_tag end
     header = header .. " — " .. current_wav
 
-    local items = {"< Previous", "> Next", "Pick from list"}
-    if #all_tags > 0 then items[#items + 1] = "Change tag" end
-    items[#items + 1] = "Done"
-    local done_idx = #items
+    local choice = pick_from_list(header, menu_items)
+    if not choice or choice == IDX_DONE then break end
 
-    local choice = pick_from_list(header, items)
-    if not choice or choice == done_idx then break end
-
-    if choice == 1 then                       -- Previous
+    if choice == IDX_PREV then
       if #wavs > 0 then
         current_idx = (current_idx - 2) % #wavs + 1
         current_wav = wavs[current_idx]
         swap_to(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
       end
 
-    elseif choice == 2 then                   -- Next
+    elseif choice == IDX_NEXT then
       if #wavs > 0 then
         current_idx = current_idx % #wavs + 1
         current_wav = wavs[current_idx]
         swap_to(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
       end
 
-    elseif choice == 3 then                   -- Pick from list
+    elseif choice == IDX_PICK then
       if #wavs > 0 then
         local tag_label = drum_type .. (current_tag ~= "" and " / " .. current_tag or "")
         local n = pick_from_list(tag_label, wavs)
@@ -1644,7 +1651,7 @@ local function cycle_samples_flow(track)
         end
       end
 
-    elseif choice == 4 and #all_tags > 0 then -- Change tag
+    elseif IDX_TAG and choice == IDX_TAG then
       local t = pick_from_list("Tag — " .. drum_type, all_tags)
       if t then
         current_tag = all_tags[t]
@@ -1701,11 +1708,7 @@ end
 local function randomize_flow(track)
   math.randomseed(os.time())
 
-  local all = scan_triaz_instances(track)
-  local voices = {}
-  for _, inst in ipairs(all) do
-    if inst.info.drum_type ~= "Zone" then voices[#voices + 1] = inst end
-  end
+  local voices = scan_non_zone_instances(track)
 
   if #voices == 0 then
     reaper.MB("No voice instances on track. Load a kit first.", "Randomize", 0)
