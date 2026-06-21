@@ -589,36 +589,27 @@ local function ask_yes_no(msg, title)
   return reaper.MB(msg, title or "TRIAZ Browser", 4) == 6
 end
 
--- Show a gate dialog, then read the most recent MIDI input event.
--- Returns MIDI note number (0-127) or nil if no note-on found.
-local function capture_midi_note()
+-- Show a gate dialog, then read the most recent MIDI note-on from input buffer.
+-- Returns note name string. Falls back to note_name(gm_note) if no note-on found.
+local function pick_note_default(gm_note)
   reaper.MB(
-    "Play a MIDI note now, then click OK.\nThe last note played will be used.",
+    "Play a MIDI note now, then click OK.\nThe note you play will be pre-filled in the next dialog.",
     "Capture Note from Keyboard", 0
   )
-  local retval, buf = reaper.MIDI_GetRecentInputEvent(0)
-  if retval > 0 and buf and #buf >= 3 then
-    local st  = buf:byte(1)
-    local num = buf:byte(2)
-    local vel = buf:byte(3)
-    if st >= 0x90 and st <= 0x9F and vel > 0 then return num end
-    if st >= 0x80 and st <= 0x8F then return num end
+  -- Scan recent events; idx 0 = most recent. Look for a note-on (vel > 0).
+  for idx = 0, 31 do
+    local retval, buf = reaper.MIDI_GetRecentInputEvent(idx)
+    if retval == 0 then break end
+    if buf and #buf >= 3 then
+      local st  = buf:byte(1)
+      local num = buf:byte(2)
+      local vel = buf:byte(3)
+      if st >= 0x90 and st <= 0x9F and vel > 0 and num >= 0 and num <= 127 then
+        return note_name(num)
+      end
+    end
   end
-  return nil
-end
-
--- Offer MIDI capture or fall back to GM suggestion. Returns note name string.
-local function pick_note_default(gm_note)
-  local suggested = note_name(gm_note)
-  local choice = pick_from_list("Set target note", {
-    "Play a note on the MIDI keyboard",
-    "Use suggested: " .. suggested,
-  })
-  if choice == 1 then
-    local n = capture_midi_note()
-    if n then return note_name(n) end
-  end
-  return suggested
+  return note_name(gm_note)
 end
 
 local function ask_string(caption, label, default)
