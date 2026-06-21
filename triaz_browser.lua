@@ -914,7 +914,8 @@ end
 -- ── Shared assign dialog + preview + keep/retry/discard loop ────────────────
 -- wav_name/full_path/drum_type/tag: initial sample to show in dialog.
 -- defs (optional table): pre-populate fields {note, layer, zone_n, vol_db, pan_pct,
---   pitch_st, zone_pitch_scale, attack, max_voices, skip_layer_check, force_new}.
+--   pitch_st, zone_lo_st, zone_hi_st, attack, max_voices, skip_layer_check, force_new}.
+--   zone_lo_st/zone_hi_st: semitones at zone low/high note (RS5k params 5+6 directly).
 -- Returns fx_idx of kept instance, or nil if discarded/cancelled.
 
 local function run_assign_dialog(track, wav_name, full_path, drum_type, tag, defs)
@@ -932,30 +933,32 @@ local function run_assign_dialog(track, wav_name, full_path, drum_type, tag, def
     "Volume dB (0=unity)",
     "Pan % (-100=L  0=C  100=R)",
     "Pitch shift semitones (-24 to +24)",
-    "Zone pitch scale (1.0=1st/key  neg=invert  0=no shift)",
+    "Zone: pitch at low note st (ignored if no zone)",
+    "Zone: pitch at high note st (ignored if no zone)",
     "Attack (0.0=instant  1.0=max)",
     "Max voices (0=unlimited  1-9)",
   }, ",")
 
   local note_default = defs.note and note_name(defs.note) or pick_note_default(gm_note)
-  local defaults_str = string.format("%s,%d,%d,%d,%d,%d,%.2f,%.2f,%d",
+  local defaults_str = string.format("%s,%d,%d,%d,%d,%d,%d,%d,%.2f,%d",
     note_default,
-    defs.layer         or 1,
-    defs.zone_n        or 0,
-    defs.vol_db        or 0,
-    defs.pan_pct       or 0,
-    defs.pitch_st      or 0,
-    defs.zone_pitch_scale or 1.0,
-    defs.attack        or 0.0,
-    defs.max_voices    or 0
+    defs.layer      or 1,
+    defs.zone_n     or 0,
+    defs.vol_db     or 0,
+    defs.pan_pct    or 0,
+    defs.pitch_st   or 0,
+    defs.zone_lo_st or -7,
+    defs.zone_hi_st or 10,
+    defs.attack     or 0.0,
+    defs.max_voices or 0
   )
 
-  local ok, result = reaper.GetUserInputs("Assign: " .. wav_name, 9, captions, defaults_str)
+  local ok, result = reaper.GetUserInputs("Assign: " .. wav_name, 10, captions, defaults_str)
   if not ok then return nil end
 
   local parts = {}
   for p in result:gmatch("[^,]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
-  while #parts < 9 do parts[#parts + 1] = "0" end
+  while #parts < 10 do parts[#parts + 1] = "0" end
 
   local zone_n = tonumber(parts[3]) or 0
   local zone = (zone_n >= 1 and zone_n <= #PITCH_ZONES) and PITCH_ZONES[zone_n] or nil
@@ -970,13 +973,14 @@ local function run_assign_dialog(track, wav_name, full_path, drum_type, tag, def
     end
   end
 
-  local layer           = math.max(1, math.min(3, tonumber(parts[2]) or 1))
-  local vol_db          = tonumber(parts[4]) or 0
-  local pan_pct         = tonumber(parts[5]) or 0
-  local pitch_st        = math.max(-24, math.min(24, tonumber(parts[6]) or 0))
-  local zone_pitch_scale = tonumber(parts[7]) or 1.0
-  local attack          = math.max(0.0, math.min(1.0, tonumber(parts[8]) or 0.0))
-  local max_voices      = math.max(0, math.min(9, math.floor(tonumber(parts[9]) or 0)))
+  local layer      = math.max(1, math.min(3, tonumber(parts[2]) or 1))
+  local vol_db     = tonumber(parts[4]) or 0
+  local pan_pct    = tonumber(parts[5]) or 0
+  local pitch_st   = math.max(-24, math.min(24, tonumber(parts[6]) or 0))
+  local zone_lo_st = tonumber(parts[7]) or -7
+  local zone_hi_st = tonumber(parts[8]) or 10
+  local attack     = math.max(0.0, math.min(1.0, tonumber(parts[9]) or 0.0))
+  local max_voices = math.max(0, math.min(9, math.floor(tonumber(parts[10]) or 0)))
 
   if not defs.skip_layer_check then
     local instances = scan_triaz_instances(track)
@@ -1008,11 +1012,9 @@ local function run_assign_dialog(track, wav_name, full_path, drum_type, tag, def
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(pitch_st))
 
     if zone then
-      local pnlo = (zone.lo - zone.mid) * zone_pitch_scale
-      local pnhi = (zone.hi - zone.mid) * zone_pitch_scale
       configure_rs5k(track, fx_idx, {
-        pitch_note_lo = pnlo,
-        pitch_note_hi = pnhi,
+        pitch_note_lo = zone_lo_st,
+        pitch_note_hi = zone_hi_st,
         mode = 0,
       })
     end
@@ -1026,9 +1028,10 @@ local function run_assign_dialog(track, wav_name, full_path, drum_type, tag, def
         "%s / %s / %s\nNote: %s%s  L%d  Vol:%ddB  Pan:%d%%  Pitch:%dst%s%s%s\n\nYes = keep\nNo = try another sample\nCancel = discard",
         drum_type, tag, wav_name,
         note_name(target_note),
-        zone and (" zone " .. note_name(zone.lo) .. "-" .. note_name(zone.hi)) or "",
+        zone and string.format(" zone %s-%s  lo:%dst hi:%dst",
+          note_name(zone.lo), note_name(zone.hi), zone_lo_st, zone_hi_st) or "",
         layer, vol_db, pan_pct, pitch_st,
-        zone and ("  Scale:" .. zone_pitch_scale) or "",
+        "",
         atk_str, voice_str
       ),
       "Keep this sample?", 3
@@ -1117,16 +1120,19 @@ local function tweak_mode(track, inst_n, action_n)
     local vox_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.max_voices)
 
     -- Detect pitch zone: metadata stores zone.mid as note; zone mids are 91/98/105
-    local zone_n_def, zone_pitch_scale_def = 0, 1.0
+    local zone_n_def = 0
     for zi, z in ipairs(PITCH_ZONES) do
-      if info.note == z.mid then
-        zone_n_def = zi
-        local pnlo_st = param_to_pitch(
-          reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_lo))
-        local span = z.lo - z.mid  -- always negative
-        if span ~= 0 then zone_pitch_scale_def = pnlo_st / span end
-        break
-      end
+      if info.note == z.mid then zone_n_def = zi; break end
+    end
+
+    -- Read pitch_note_lo/hi directly from RS5k params 5+6
+    local pnlo_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_lo)
+    local pnhi_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_hi)
+    local zone_lo_st_def = math.floor(param_to_pitch(pnlo_raw) + 0.5)
+    local zone_hi_st_def = math.floor(param_to_pitch(pnhi_raw) + 0.5)
+    -- If unset zone (kit placeholder), default to -7/+10
+    if zone_n_def > 0 and zone_lo_st_def == -24 and zone_hi_st_def == -24 then
+      zone_lo_st_def, zone_hi_st_def = -7, 10
     end
 
     local wav_path = (ok_f and cur_file ~= "") and cur_file or ""
@@ -1139,7 +1145,8 @@ local function tweak_mode(track, inst_n, action_n)
       vol_db           = math.floor(20 * math.log(vol_raw + 1e-9, 10) + 0.5),
       pan_pct          = math.floor((pan_raw - 0.5) * 200 + 0.5),
       pitch_st         = math.floor(param_to_pitch(pit_raw) + 0.5),
-      zone_pitch_scale = zone_pitch_scale_def,
+      zone_lo_st       = zone_lo_st_def,
+      zone_hi_st       = zone_hi_st_def,
       attack           = math.floor(atk_raw * 100 + 0.5) / 100,
       max_voices       = math.floor(vox_raw * 9 + 0.5),
       skip_layer_check = true,
@@ -1234,17 +1241,18 @@ local function assign_to_zone_flow(track)
   if not zn then return end
   local zone = PITCH_ZONES[zn]
 
-  local ok_s, scale_str = reaper.GetUserInputs(
-    "Zone pitch scale", 1,
-    "Pitch scale (1.0=1st/key  neg=invert  0=no shift)", "1.0"
+  local ok_s, s_result = reaper.GetUserInputs(
+    "Zone pitch range", 2,
+    "Pitch at low note st,Pitch at high note st", "-7,10"
   )
   if not ok_s then return end
-  local zone_pitch_scale = tonumber(scale_str) or 1.0
+  local s_parts = {}
+  for p in s_result:gmatch("[^,]+") do s_parts[#s_parts + 1] = p end
+  local pnlo = tonumber(s_parts[1]) or -7
+  local pnhi = tonumber(s_parts[2]) or 10
 
   local fx_idx = inst.fx_idx
   local info   = inst.info
-  local pnlo   = (zone.lo - zone.mid) * zone_pitch_scale
-  local pnhi   = (zone.hi - zone.mid) * zone_pitch_scale
 
   configure_rs5k(track, fx_idx, {
     note_lo       = zone.lo,
