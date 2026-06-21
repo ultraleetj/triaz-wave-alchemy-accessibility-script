@@ -1708,7 +1708,7 @@ local function cycle_samples_flow(track)
     if current_tag ~= "" then header = header .. " / " .. current_tag end
     header = header .. " — " .. current_wav
 
-    local items = {"< Previous", "> Next"}
+    local items = {"Previous", "Next"}
     if IDX_TAG then items[#items + 1] = "Change tag" end
     items[#items + 1] = "Done"
     for i, w in ipairs(wavs) do
@@ -1961,8 +1961,8 @@ CYCLE SAMPLES  (inside Tweak submenu)
     Pitch Zones (2 assigned)  (sub-picks which zone, then cycles it)
 
   Step 2 — Cycle menu opens, header shows the current sample. Items:
-    < Previous    Step back one WAV in the current tag (wraps around)
-    > Next        Step forward one WAV
+    Previous      Step back one WAV in the current tag (wraps around)
+    Next          Step forward one WAV
     Change tag    Jump to a different tag within the same drum type
     Done          Exit
     (full list of WAVs in the current tag, current one marked with *)
