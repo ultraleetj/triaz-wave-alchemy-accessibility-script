@@ -1103,20 +1103,23 @@ local function tweak_mode(track, inst_n, action_n)
       if not action then return end
     end
 
+    local function refresh_file()
+      ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, fx_idx, "FILE0")
+      cur_wav = (ok_f and cur_file ~= "") and (cur_file:match("[^\\/]+$") or cur_file) or "?"
+    end
+
     if action == 1 then
       local new_wav, new_path, new_type, new_tag = pick_source()
-      if not new_wav then return end
-
-      local is_noise = (new_type == "Noise") and NOISE_LOOP_FILES[new_wav]
-      local new_fx_name = make_fx_name(info.note, info.layer, new_type, new_tag)
-
-      configure_rs5k(track, fx_idx, {
-        path    = new_path,
-        no_loop = is_noise,
-        fx_name = new_fx_name,
-      })
-      reaper.MB("Sample updated.", "Done", 0)
-      return
+      if new_wav then
+        local is_noise = (new_type == "Noise") and NOISE_LOOP_FILES[new_wav]
+        configure_rs5k(track, fx_idx, {
+          path    = new_path,
+          no_loop = is_noise,
+          fx_name = make_fx_name(info.note, info.layer, new_type, new_tag),
+        })
+        refresh_file()
+      end
+      -- loop back to picker
 
     elseif action == 2 then
       local vol_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.volume)
@@ -1157,8 +1160,10 @@ local function tweak_mode(track, inst_n, action_n)
       })
       if new_fx then
         remove_rs5k(track, fx_idx)
+        fx_idx = new_fx
       end
-      return
+      refresh_file()
+      -- loop back to picker
 
     elseif action == 3 then
       if ok_f and cur_file ~= "" then
@@ -1168,18 +1173,19 @@ local function tweak_mode(track, inst_n, action_n)
       else
         reaper.MB("No sample loaded.", "Preview", 0)
       end
-      -- non-terminal: loop back to action picker
+      -- loop back to picker
 
     elseif action == 4 then
       dump_rs5k_params(track, fx_idx)
-      -- non-terminal: loop back to action picker
+      -- loop back to picker
 
     elseif action == 5 then
       if ask_yes_no("Remove this RS5k instance?", "Confirm Remove") then
         remove_rs5k(track, fx_idx)
         reaper.MB("Removed.", "Done", 0)
+        return  -- instance gone, exit
       end
-      return
+      -- cancelled remove: loop back to picker
     end
   end
 end
