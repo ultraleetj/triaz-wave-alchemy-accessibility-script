@@ -385,6 +385,8 @@ local RS5K_PARAM = {
   gain_min_vel  = 2,   -- Gain at velocity 0: 0=silent (velocity sensitive), 1=full (flat)
   note_lo       = 3,   -- Note range start: 0..1 mapped from MIDI 0..127
   note_hi       = 4,   -- Note range end:   0..1 mapped from MIDI 0..127
+  pitch_note_lo = 5,   -- Pitch at note_lo: same normalization as pitch_st
+  pitch_note_hi = 6,   -- Pitch at note_hi: same normalization as pitch_st
   loop             = 12,  -- Loop: 0=no loop, 1=loop
   obey_note_off    = 11,  -- 0=one-shot (play to end), 1=stop on note-off
   pitch_st         = 15,  -- Pitch adjust: normalized 0..1 where 0.5 = 0 semitones
@@ -507,6 +509,14 @@ local function configure_rs5k(track, fx_idx, params)
   if params.pitch_st then
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st,
       pitch_to_param(params.pitch_st))
+  end
+  if params.pitch_note_lo then
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_lo,
+      pitch_to_param(params.pitch_note_lo))
+  end
+  if params.pitch_note_hi then
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_note_hi,
+      pitch_to_param(params.pitch_note_hi))
   end
   if params.volume ~= nil then
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.volume, params.volume)
@@ -833,11 +843,13 @@ local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_
 
   local is_noise = (drum_type == "Noise") and NOISE_LOOP_FILES[wav_name]
 
-  local note_lo, note_hi, pitch_st
+  local note_lo, note_hi, pitch_st, pitch_note_lo, pitch_note_hi
   if zone then
-    note_lo  = zone.lo
-    note_hi  = zone.hi
-    pitch_st = 0
+    note_lo       = zone.lo
+    note_hi       = zone.hi
+    pitch_st      = 0
+    pitch_note_lo = zone.lo - zone.mid  -- semitones below center at lowest note
+    pitch_note_hi = zone.hi - zone.mid  -- semitones above center at highest note
   else
     note_lo  = note
     note_hi  = note
@@ -845,15 +857,17 @@ local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_
   end
 
   configure_rs5k(track, fx_idx, {
-    path     = full_path,
-    note_lo  = note_lo,
-    note_hi  = note_hi,
-    pitch_st = pitch_st,
-    volume   = 0.8,
-    pan      = 0.5,
-    no_loop  = is_noise,
-    fx_name  = fx_name,
-    meta     = {note=note, layer=layer, drum_type=drum_type, tag=tag},
+    path          = full_path,
+    note_lo       = note_lo,
+    note_hi       = note_hi,
+    pitch_st      = pitch_st,
+    pitch_note_lo = pitch_note_lo,
+    pitch_note_hi = pitch_note_hi,
+    volume        = 0.8,
+    pan           = 0.5,
+    no_loop       = is_noise,
+    fx_name       = fx_name,
+    meta          = {note=note, layer=layer, drum_type=drum_type, tag=tag},
   })
 
   return true, fx_idx
