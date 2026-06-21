@@ -1113,6 +1113,8 @@ local function load_kit_flow(track)
 
   local stats = {loaded=0, failed=0}
 
+  reaper.PreventUIRefresh(1)
+
   -- Rimshot: fixed across all kits
   load_voice(track, RIMSHOT_DEFAULT[1], RIMSHOT_DEFAULT[2], {37}, nil, stats)
 
@@ -1161,6 +1163,9 @@ local function load_kit_flow(track)
       stats.failed = stats.failed + 1
     end
   end
+
+  reaper.PreventUIRefresh(-1)
+  reaper.TrackList_AdjustWindows(false)
 
   reaper.MB(
     string.format("Kit: %s\nLoaded: %d  Failed: %d\n\nToms: pitched -2 to +3 st from %s, panned R→L.\nHH Open: ~50ms note-off release.\nUpper zones E5-C7 empty — assign via Add sample.",
