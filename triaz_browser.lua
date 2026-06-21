@@ -1725,19 +1725,18 @@ LOAD KIT
   samples — assign to them via Add / assign sample (enter zone # in dialog).
 
 TWEAK
-  Top-level item in the submenu:
+  At the top of the submenu:
     - Assign to pitch zone (play note)
-        Play a MIDI note to identify the instance, then pick a zone (E5-C7).
-        Set pitch at low and high note in semitones (default -7 / +10).
-        Useful when jamming — no need to navigate by label.
-  Per-instance sub-menu (each instance listed by label):
-    - Swap sample      Browse a new WAV (file browser or from selected item)
-    - Edit parameters  Full 10-field dialog pre-populated with current values.
-                       Detects if instance is a zone and restores zone # and
-                       pitch lo/hi so zone mode is preserved on re-submit.
-    - Preview          Play the current sample
-    - Dump RS5k params All parameter values (message box + console output)
-    - Remove           Delete this RS5k instance
+        Play any note on your controller. The script catches it, finds the
+        matching sample, and asks which zone to move it to and what pitch
+        range to use (default -7 / +10 semitones, low to high key).
+  Each loaded sample then has its own sub-menu:
+    - Swap sample      Pick a different WAV (file browser or timeline item)
+    - Edit parameters  Same 10-field dialog, pre-filled with current values.
+                       Zone samples come back in zone mode automatically.
+    - Preview          Play the sample
+    - Dump RS5k params Show all parameter values (message box + console)
+    - Remove           Delete this instance
 
 RANDOMIZE
   Four modes:
@@ -1752,24 +1751,15 @@ RANDOMIZE
       text = [[
 THE 15 PRESET KITS
 ------------------
-  01 Techno Dark        02 Techno Punchy      03 Techno 808
-  04 House Classic      05 House Electronic   06 Lo-Fi Acoustic
-  07 Lo-Fi Tape         08 Rap/Trap           09 Acoustic Studio
-  10 Acoustic Room      11 Drum Machine       12 Electronica/IDM
-  13 Organic/World      14 Heavy/Industrial   15 Pop/Disco
+Kits range from dark techno and punchy 808s to lo-fi tape, acoustic studio,
+drum machine, electronica/IDM, organic/world, heavy/industrial, and pop/disco.
+Explore them from the Load Kit menu — names are descriptive enough to give
+a feel before loading.
 
-Each kit assigns voices to these GM notes:
-  35/36 Kick (two timbres)   38/40 Snare (two timbres)   37 Rimshot (fixed)
-  39 Clap   42/44 Hi-Hat Closed   46 Hi-Hat Open
-  41/43/45/47/48/50 Toms (6 toms, pitched and panned L to R)
-  49/57 Crash   51/59 Ride   54 Perc/Shaker
-
-Fixed voices (same in all kits):
-  52 Chinese cymbal   55 Splash   53 Ride bell   56 Cowbell
-  60-64 Bongo/Conga/Tumba   65-66 Timbale
-  75 Claves   76-77 Woodblock   82 Shaker   86-87 Surdo
-
-Lower extras (notes 21-34): Perc Glitch, Layer, Noise, and Foley sounds.
+Each kit covers kick, snare, clap, hi-hats, six pitched/panned toms, crash,
+ride, and perc. A fixed set of world perc, cymbal variations, cowbell, and
+foley fills out the full GM note range. Lower extras (notes 21-34) add
+Perc Glitch, Layer, Noise, and Foley textures.
 
 UPPER PITCH ZONES (notes 88-108)
 ---------------------------------
