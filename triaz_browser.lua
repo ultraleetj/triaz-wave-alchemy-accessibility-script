@@ -3,7 +3,6 @@
 -- Accessible via screen reader (native REAPER dialogs only)
 
 local TRIAZ_BASE = "X:\\samplers\\TRIAZ\\Samples\\TRIAZ - Factory Collection\\"
-local PITCH_ZONE_SEMITONES = 6  -- each pitch zone spans this many semitones
 
 -- Drum types in folder order
 local DRUM_TYPES = {
@@ -124,185 +123,233 @@ local function find_tag(drum_type, hint)
 end
 
 -- Pick WAV at midpoint of sorted list (variety without cycling)
+-- tag="" means WAVs are in the drum type root folder (e.g. Noise)
 local function pick_kit_wav(drum_type, tag)
-  local tag_path = TRIAZ_BASE .. drum_type .. "\\" .. tag
-  local wavs = list_wavs(tag_path)
+  local path = (tag and tag ~= "")
+    and (TRIAZ_BASE .. drum_type .. "\\" .. tag)
+    or  (TRIAZ_BASE .. drum_type)
+  local wavs = list_wavs(path)
   if #wavs == 0 then return nil, nil end
   local idx = math.floor(#wavs / 2) + 1
   local wav = wavs[idx]
-  return wav, tag_path .. "\\" .. wav
+  return wav, path .. "\\" .. wav
 end
 
 -- ── Kit definitions ──────────────────────────────────────────────────────────
--- voice fields: note, drum_type (exact folder), tag_hint (partial match OK)
--- rimshot (note 37) is fixed across all kits: Perc Acoustic / Rimshot
+-- Mirrored from generate_kits.py. Each kit: voice_key = {drum_type, tag}.
+-- Rimshot (note 37) fixed across all kits via RIMSHOT_DEFAULT.
+-- Tom voices (notes 41,43,45,47,48,50) are pitched relative to TOM_PITCH_CENTER.
 
 local KITS = {
-  { name = "01 Techno Dark", voices = {
-    {note=36, type="Kick Electronic",  tag="Deep"},
-    {note=38, type="Snare Electronic", tag="Noise"},
-    {note=39, type="Claps & Snaps",    tag="Noise"},
-    {note=42, type="Hihat Closed",     tag="Metallic"},
-    {note=46, type="HiHat Open",       tag="Metallic"},
-    {note=45, type="Tom",              tag="Deep"},
-    {note=49, type="Crash",            tag="Noise"},
-    {note=51, type="Ride",             tag="Synthetic"},
-    {note=54, type="Perc Electronic",  tag="Metallic"},
-  }},
-  { name = "02 Techno Punchy", voices = {
-    {note=36, type="Kick Electronic",  tag="Punchy"},
-    {note=38, type="Snare Electronic", tag="Tight"},
-    {note=39, type="Claps & Snaps",    tag="Snap"},
-    {note=42, type="Hihat Closed",     tag="Synthetic"},
-    {note=46, type="HiHat Open",       tag="Synthetic"},
-    {note=45, type="Tom",              tag="Punchy"},
-    {note=49, type="Crash",            tag="Synthetic"},
-    {note=51, type="Ride",             tag="Synthetic"},
-    {note=54, type="Perc Electronic",  tag="Snap"},
-  }},
-  { name = "03 Techno 808", voices = {
-    {note=36, type="Kick Electronic",  tag="808"},
-    {note=38, type="Snare Electronic", tag="808"},
-    {note=39, type="Claps & Snaps",    tag="808"},
-    {note=42, type="Hihat Closed",     tag="808"},
-    {note=46, type="HiHat Open",       tag="808"},
-    {note=45, type="Tom",              tag="808"},
-    {note=49, type="Crash",            tag="Synthetic"},
-    {note=51, type="Ride",             tag="Synthetic"},
-    {note=54, type="Perc Electronic",  tag="Snap"},
-  }},
-  { name = "04 House Classic", voices = {
-    {note=36, type="Kick Electronic",  tag="Deep"},
-    {note=38, type="Snare Electronic", tag="Room"},
-    {note=39, type="Claps & Snaps",    tag="Room"},
-    {note=42, type="Hihat Closed",     tag="Acoustic"},
-    {note=46, type="HiHat Open",       tag="Acoustic"},
-    {note=45, type="Tom",              tag="Room"},
-    {note=49, type="Crash",            tag="Acoustic"},
-    {note=51, type="Ride",             tag="Acoustic"},
-    {note=54, type="Shakers",          tag="Acoustic"},
-  }},
-  { name = "05 House Electronic", voices = {
-    {note=36, type="Kick Electronic",  tag="Organic"},
-    {note=38, type="Snare Electronic", tag="Organic"},
-    {note=39, type="Claps & Snaps",    tag="Layered"},
-    {note=42, type="Hihat Closed",     tag="Synthetic"},
-    {note=46, type="HiHat Open",       tag="Synthetic"},
-    {note=45, type="Tom",              tag="Organic"},
-    {note=49, type="Crash",            tag="Creative"},
-    {note=51, type="Ride",             tag="Creative"},
-    {note=54, type="Perc Electronic",  tag="Hand"},
-  }},
-  { name = "06 Lo-Fi Acoustic", voices = {
-    {note=36, type="Kick Acoustic",    tag="Deep"},
-    {note=38, type="Snare Acoustic",   tag="Room"},
-    {note=39, type="Claps & Snaps",    tag="Acoustic"},
-    {note=42, type="Hihat Closed",     tag="Lo-Fi"},
-    {note=46, type="HiHat Open",       tag="Lo-Fi"},
-    {note=45, type="Tom",              tag="Acoustic"},
-    {note=49, type="Crash",            tag="Room"},
-    {note=51, type="Ride",             tag="Room"},
-    {note=54, type="Perc Acoustic",    tag="Small"},
-  }},
-  { name = "07 Lo-Fi Tape", voices = {
-    {note=36, type="Kick Electronic",  tag="Tape"},
-    {note=38, type="Snare Acoustic",   tag="Tape"},
-    {note=39, type="Claps & Snaps",    tag="Tape"},
-    {note=42, type="Hihat Closed",     tag="Tape"},
-    {note=46, type="HiHat Open",       tag="Tape"},
-    {note=45, type="Tom",              tag="Tape"},
-    {note=49, type="Crash",            tag="Organic"},
-    {note=51, type="Ride",             tag="Acoustic"},
-    {note=54, type="Foley",            tag="Sticks"},
-  }},
-  { name = "08 Rap/Trap", voices = {
-    {note=36, type="Kick Electronic",  tag="808"},
-    {note=38, type="Snare Electronic", tag="Heavy"},
-    {note=39, type="Claps & Snaps",    tag="Heavy"},
-    {note=42, type="Hihat Closed",     tag="Noise"},
-    {note=46, type="HiHat Open",       tag="Noise"},
-    {note=45, type="Tom",              tag="Heavy"},
-    {note=49, type="Crash",            tag="Synthetic"},
-    {note=51, type="Ride",             tag="Synthetic"},
-    {note=54, type="Perc Electronic",  tag="Snap"},
-  }},
-  { name = "09 Acoustic Studio", voices = {
-    {note=36, type="Kick Acoustic",    tag="Punchy"},
-    {note=38, type="Snare Acoustic",   tag="Bright"},
-    {note=39, type="Claps & Snaps",    tag="Acoustic"},
-    {note=42, type="Hihat Closed",     tag="Acoustic"},
-    {note=46, type="HiHat Open",       tag="Acoustic"},
-    {note=45, type="Tom",              tag="Acoustic"},
-    {note=49, type="Crash",            tag="Acoustic"},
-    {note=51, type="Ride",             tag="Acoustic"},
-    {note=54, type="Perc Acoustic",    tag="Hand"},
-  }},
-  { name = "10 Acoustic Room", voices = {
-    {note=36, type="Kick Acoustic",    tag="Room"},
-    {note=38, type="Snare Acoustic",   tag="Room"},
-    {note=39, type="Claps & Snaps",    tag="Room"},
-    {note=42, type="Hihat Closed",     tag="Room"},
-    {note=46, type="HiHat Open",       tag="Room"},
-    {note=45, type="Tom",              tag="Room"},
-    {note=49, type="Crash",            tag="Room"},
-    {note=51, type="Ride",             tag="Room"},
-    {note=54, type="Perc Acoustic",    tag="Room"},
-  }},
-  { name = "11 Drum Machine", voices = {
-    {note=36, type="Kick Electronic",  tag="Drum Machine"},
-    {note=38, type="Snare Electronic", tag="Drum Machine"},
-    {note=39, type="Claps & Snaps",    tag="Drum Machine"},
-    {note=42, type="Hihat Closed",     tag="Drum Machine"},
-    {note=46, type="HiHat Open",       tag="Drum Machine"},
-    {note=45, type="Tom",              tag="Drum Machine"},
-    {note=49, type="Crash",            tag="Drum Machine"},
-    {note=51, type="Ride",             tag="Drum Machine"},
-    {note=54, type="Perc Electronic",  tag="Drum Machine"},
-  }},
-  { name = "12 Electronica/IDM", voices = {
-    {note=36, type="Kick Electronic",  tag="Layered"},
-    {note=38, type="Snare Electronic", tag="Layered"},
-    {note=39, type="Claps & Snaps",    tag="Glitch"},
-    {note=42, type="Hihat Closed",     tag="Noise"},
-    {note=46, type="HiHat Open",       tag="Heavy"},
-    {note=45, type="Tom",              tag="Creative"},
-    {note=49, type="Crash",            tag="Creative"},
-    {note=51, type="Ride",             tag="Creative"},
-    {note=54, type="Perc Glitch",      tag=""},
-  }},
-  { name = "13 Organic/World", voices = {
-    {note=36, type="Kick Acoustic",    tag="Heavy"},
-    {note=38, type="Snare Acoustic",   tag="Organic"},
-    {note=39, type="Claps & Snaps",    tag="Organic"},
-    {note=42, type="Hihat Closed",     tag="Metallic"},
-    {note=46, type="HiHat Open",       tag="Acoustic"},
-    {note=45, type="Tom",              tag="Organic"},
-    {note=49, type="Crash",            tag="Organic"},
-    {note=51, type="Ride",             tag="Acoustic"},
-    {note=54, type="Perc Acoustic",    tag="Bongo"},
-  }},
-  { name = "14 Heavy/Industrial", voices = {
-    {note=36, type="Kick Electronic",  tag="Heavy"},
-    {note=38, type="Snare Electronic", tag="Heavy"},
-    {note=39, type="Claps & Snaps",    tag="Heavy"},
-    {note=42, type="Hihat Closed",     tag="Metallic"},
-    {note=46, type="HiHat Open",       tag="Heavy"},
-    {note=45, type="Tom",              tag="Heavy"},
-    {note=49, type="Crash",            tag="Noise"},
-    {note=51, type="Ride",             tag="Bright"},
-    {note=54, type="Perc Electronic",  tag="Metallic"},
-  }},
-  { name = "15 Pop/Disco", voices = {
-    {note=36, type="Kick Electronic",  tag="Punchy"},
-    {note=38, type="Snare Acoustic",   tag="Bright"},
-    {note=39, type="Claps & Snaps",    tag="Bright"},
-    {note=42, type="Hihat Closed",     tag="Bright"},
-    {note=46, type="HiHat Open",       tag="Bright"},
-    {note=45, type="Tom",              tag="Punchy"},
-    {note=49, type="Crash",            tag="Bright"},
-    {note=51, type="Ride",             tag="Bright"},
-    {note=54, type="Shakers",          tag="Acoustic"},
-  }},
+  { name="01 Techno Dark",
+    kick={"Kick Electronic","Deep"},       kick_alt={"Kick Electronic","Sub"},
+    snare={"Snare Electronic","Noise"},    snare_alt={"Snare Electronic","Synthetic"},
+    clap={"Claps & Snaps","Noise"},
+    hh_c={"Hihat Closed","Metallic"},      hh_pedal={"Hihat Closed","Acoustic"},
+    hh_o={"HiHat Open","Metallic"},
+    tom={"Tom","Deep"},
+    crash={"Crash","Noise"},               ride={"Ride","Synthetic"},
+    perc={"Perc Electronic","Metallic"},
+  },
+  { name="02 Techno Punchy",
+    kick={"Kick Electronic","Punchy"},     kick_alt={"Kick Electronic","Tight"},
+    snare={"Snare Electronic","Tight"},    snare_alt={"Snare Electronic","Bright"},
+    clap={"Claps & Snaps","Snap"},
+    hh_c={"Hihat Closed","Synthetic"},     hh_pedal={"Hihat Closed","Metallic"},
+    hh_o={"HiHat Open","Synthetic"},
+    tom={"Tom","Punchy"},
+    crash={"Crash","Synthetic"},           ride={"Ride","Synthetic"},
+    perc={"Perc Electronic","Blips & Pops"},
+  },
+  { name="03 Techno 808",
+    kick={"Kick Electronic","808"},        kick_alt={"Kick Electronic","Sub"},
+    snare={"Snare Electronic","808"},      snare_alt={"Snare Electronic","Drum Machine"},
+    clap={"Claps & Snaps","808"},
+    hh_c={"Hihat Closed","808"},           hh_pedal={"Hihat Closed","Synthetic"},
+    hh_o={"HiHat Open","808"},
+    tom={"Tom","808"},
+    crash={"Crash","Synthetic"},           ride={"Ride","Synthetic"},
+    perc={"Perc Electronic","Snap"},
+  },
+  { name="04 House Classic",
+    kick={"Kick Electronic","Deep"},       kick_alt={"Kick Electronic","Room"},
+    snare={"Snare Electronic","Room"},     snare_alt={"Snare Acoustic","Bright"},
+    clap={"Claps & Snaps","Room"},
+    hh_c={"Hihat Closed","Acoustic"},      hh_pedal={"Hihat Closed","Room"},
+    hh_o={"HiHat Open","Acoustic"},
+    tom={"Tom","Room"},
+    crash={"Crash","Acoustic"},            ride={"Ride","Acoustic"},
+    perc={"Shakers","Acoustic"},
+  },
+  { name="05 House Electronic",
+    kick={"Kick Electronic","Organic"},    kick_alt={"Kick Electronic","Layered"},
+    snare={"Snare Electronic","Organic"},  snare_alt={"Snare Electronic","Layered"},
+    clap={"Claps & Snaps","Layered"},
+    hh_c={"Hihat Closed","Synthetic"},     hh_pedal={"Hihat Closed","Acoustic"},
+    hh_o={"HiHat Open","Synthetic"},
+    tom={"Tom","Organic"},
+    crash={"Crash","Creative"},            ride={"Ride","Creative"},
+    perc={"Perc Electronic","Hand Drum"},
+  },
+  { name="06 Lo-Fi Acoustic",
+    kick={"Kick Acoustic","Deep"},         kick_alt={"Kick Acoustic","Room"},
+    snare={"Snare Acoustic","Room"},       snare_alt={"Snare Acoustic","Lo-Fi"},
+    clap={"Claps & Snaps","Acoustic"},
+    hh_c={"Hihat Closed","Lo-Fi"},         hh_pedal={"Hihat Closed","Acoustic"},
+    hh_o={"HiHat Open","Lo-Fi"},
+    tom={"Tom","Acoustic"},
+    crash={"Crash","Room"},                ride={"Ride","Room"},
+    perc={"Perc Acoustic","Small Perc"},
+  },
+  { name="07 Lo-Fi Tape",
+    kick={"Kick Electronic","Tape & Vinyl"}, kick_alt={"Kick Acoustic","Deep"},
+    snare={"Snare Acoustic","Tape & Vinyl"}, snare_alt={"Snare Electronic","Lo-Fi"},
+    clap={"Claps & Snaps","Tape & Vinyl"},
+    hh_c={"Hihat Closed","Tape & Vinyl"},  hh_pedal={"Hihat Closed","Lo-Fi"},
+    hh_o={"HiHat Open","Tape & Vinyl"},
+    tom={"Tom","Tape & Vinyl"},
+    crash={"Crash","Organic"},             ride={"Ride","Acoustic"},
+    perc={"Foley","Sticks & Clicks"},
+  },
+  { name="08 Rap/Trap",
+    kick={"Kick Electronic","808"},        kick_alt={"Kick Electronic","Sub"},
+    snare={"Snare Electronic","Heavy"},    snare_alt={"Snare Electronic","808"},
+    clap={"Claps & Snaps","Heavy"},
+    hh_c={"Hihat Closed","Noise"},         hh_pedal={"Hihat Closed","Synthetic"},
+    hh_o={"HiHat Open","Noise"},
+    tom={"Tom","Heavy"},
+    crash={"Crash","Synthetic"},           ride={"Ride","Synthetic"},
+    perc={"Perc Electronic","Snap"},
+  },
+  { name="09 Acoustic Studio",
+    kick={"Kick Acoustic","Punchy"},       kick_alt={"Kick Acoustic","Bright"},
+    snare={"Snare Acoustic","Bright"},     snare_alt={"Snare Acoustic","Room"},
+    clap={"Claps & Snaps","Acoustic"},
+    hh_c={"Hihat Closed","Acoustic"},      hh_pedal={"Hihat Closed","Room"},
+    hh_o={"HiHat Open","Acoustic"},
+    tom={"Tom","Acoustic"},
+    crash={"Crash","Acoustic"},            ride={"Ride","Acoustic"},
+    perc={"Perc Acoustic","Hand Drum"},
+  },
+  { name="10 Acoustic Room",
+    kick={"Kick Acoustic","Room"},         kick_alt={"Kick Acoustic","Heavy"},
+    snare={"Snare Acoustic","Room"},       snare_alt={"Snare Acoustic","Organic"},
+    clap={"Claps & Snaps","Room"},
+    hh_c={"Hihat Closed","Room"},          hh_pedal={"Hihat Closed","Acoustic"},
+    hh_o={"HiHat Open","Room"},
+    tom={"Tom","Room"},
+    crash={"Crash","Room"},                ride={"Ride","Room"},
+    perc={"Perc Acoustic","Room"},
+  },
+  { name="11 Drum Machine",
+    kick={"Kick Electronic","Drum Machine"},     kick_alt={"Kick Electronic","Synthetic"},
+    snare={"Snare Electronic","Drum Machine"},   snare_alt={"Snare Electronic","808"},
+    clap={"Claps & Snaps","Drum Machine"},
+    hh_c={"Hihat Closed","Drum Machine"},        hh_pedal={"Hihat Closed","Synthetic"},
+    hh_o={"HiHat Open","Drum Machine"},
+    tom={"Tom","Drum Machine"},
+    crash={"Crash","Drum Machine"},              ride={"Ride","Drum Machine"},
+    perc={"Perc Electronic","Drum Machine"},
+  },
+  { name="12 Electronica/IDM",
+    kick={"Kick Electronic","Layered"},    kick_alt={"Kick Electronic","Creative"},
+    snare={"Snare Electronic","Layered"},  snare_alt={"Snare Electronic","Creative"},
+    clap={"Claps & Snaps","Glitch"},
+    hh_c={"Hihat Closed","Noise"},         hh_pedal={"Hihat Closed","808"},
+    hh_o={"HiHat Open","Heavy"},
+    tom={"Tom","Creative"},
+    crash={"Crash","Creative"},            ride={"Ride","Creative"},
+    perc={"Perc Glitch","Blips & Pops"},
+  },
+  { name="13 Organic/World",
+    kick={"Kick Acoustic","Heavy"},        kick_alt={"Kick Acoustic","Deep"},
+    snare={"Snare Acoustic","Organic"},    snare_alt={"Snare Acoustic","Metallic"},
+    clap={"Claps & Snaps","Organic"},
+    hh_c={"Hihat Closed","Metallic"},      hh_pedal={"Hihat Closed","Acoustic"},
+    hh_o={"HiHat Open","Acoustic"},
+    tom={"Tom","Organic"},
+    crash={"Crash","Organic"},             ride={"Ride","Acoustic"},
+    perc={"Perc Acoustic","Bongo"},
+  },
+  { name="14 Heavy/Industrial",
+    kick={"Kick Electronic","Heavy"},      kick_alt={"Kick Electronic","Sub"},
+    snare={"Snare Electronic","Heavy"},    snare_alt={"Snare Electronic","Noise"},
+    clap={"Claps & Snaps","Heavy"},
+    hh_c={"Hihat Closed","Metallic"},      hh_pedal={"Hihat Closed","Noise"},
+    hh_o={"HiHat Open","Heavy"},
+    tom={"Tom","Heavy"},
+    crash={"Crash","Noise"},               ride={"Ride","Bright"},
+    perc={"Perc Electronic","Metallic"},
+  },
+  { name="15 Pop/Disco",
+    kick={"Kick Electronic","Punchy"},     kick_alt={"Kick Acoustic","Bright"},
+    snare={"Snare Acoustic","Bright"},     snare_alt={"Snare Electronic","Tight"},
+    clap={"Claps & Snaps","Bright"},
+    hh_c={"Hihat Closed","Bright"},        hh_pedal={"Hihat Closed","Acoustic"},
+    hh_o={"HiHat Open","Bright"},
+    tom={"Tom","Punchy"},
+    crash={"Crash","Bright"},              ride={"Ride","Bright"},
+    perc={"Shakers","Acoustic"},
+  },
+}
+
+-- Voice key → GM notes (order matters for loading)
+local KIT_VOICE_ORDER = {"kick","kick_alt","snare","snare_alt","clap","hh_c","hh_pedal","hh_o","crash","ride","perc"}
+local KIT_VOICE_NOTES = {
+  kick={36}, kick_alt={35},
+  snare={38}, snare_alt={40},
+  clap={39},
+  hh_c={42}, hh_pedal={44},
+  hh_o={46},
+  crash={49,57}, ride={51,59},
+  perc={54},
+}
+local RIMSHOT_DEFAULT  = {"Perc Acoustic", "Rimshot"}
+local TOM_NOTES        = {41,43,45,47,48,50}
+local TOM_PITCH_CENTER = 45
+
+-- Fixed voices: same across all kits, GM range
+local KIT_FIXED_VOICES = {
+  {notes={52},    type="Crash",           tag="Creative"},
+  {notes={55},    type="Crash",           tag="Bright"},
+  {notes={53},    type="Ride",            tag="Bright"},
+  {notes={56},    type="Perc Electronic", tag="Blocks & Bells"},
+  {notes={69},    type="Shakers",         tag="Metallic"},
+  {notes={70},    type="Shakers",         tag="Synthetic"},
+  {notes={60,61}, type="Perc Acoustic",   tag="Bongo"},
+  {notes={62,63}, type="Perc Acoustic",   tag="Conga"},
+  {notes={64},    type="Perc Acoustic",   tag="Tumba"},
+  {notes={65,66}, type="Perc Acoustic",   tag="Timbale"},
+  {notes={75},    type="Perc Acoustic",   tag="Sticks & Clicks"},
+  {notes={76,77}, type="Perc Acoustic",   tag="Blocks & Bells"},
+  {notes={82},    type="Shakers",         tag="Organic"},
+  {notes={86,87}, type="Tom",             tag="Deep"},
+}
+
+-- Lower extras: notes 21-34, same across all kits
+local KIT_LOWER_VOICES = {
+  {notes={21}, type="Perc Glitch", tag="Blips & Pops"},
+  {notes={22}, type="Perc Glitch", tag="Creative"},
+  {notes={23}, type="Perc Glitch", tag="Metallic"},
+  {notes={24}, type="Perc Glitch", tag="Synthetic"},
+  {notes={25}, type="Perc Glitch", tag="Deep"},
+  {notes={26}, type="Layer",       tag="Sub"},
+  {notes={27}, type="Layer",       tag="Bright"},
+  {notes={28}, type="Layer",       tag="Creative"},
+  {notes={29}, type="Layer",       tag="Noise"},
+  {notes={30}, type="Layer",       tag="Snap"},
+  {notes={31}, type="Noise",       tag=""},
+  {notes={32}, type="Foley",       tag="Blips & Pops"},
+  {notes={33}, type="Foley",       tag="Metallic"},
+  {notes={34}, type="Foley",       tag="Organic"},
+}
+
+-- Upper pitch zones: 3 × 7-note empty RS5k slots (MIDI 88-108, E5-C7)
+-- User assigns any TRIAZ sample via tweak mode; pitch shifts per played note.
+local KIT_UPPER_ZONES = {
+  {lo=88,  hi=94,  label="zone 1 (E5-A#5)"},
+  {lo=95,  hi=101, label="zone 2 (B5-F6)"},
+  {lo=102, hi=108, label="zone 3 (F#6-C7)"},
 }
 
 -- ── FX name parsing / formatting ────────────────────────────────────────────
@@ -618,27 +665,13 @@ end
 
 -- ── Pitch zone helpers ────────────────────────────────────────────────────────
 
--- Available pitch zones outside GM range:
---   Lower: MIDI 21-34  (A0–A#1), 14 notes → 2 zones of 6 + leftover
---   Upper: MIDI 88-108 (E6–C8),  21 notes → 3 zones of 6 + leftover
-local PITCH_ZONES = {}
-do
-  local half = math.floor(PITCH_ZONE_SEMITONES / 2)
-  -- lower range
-  local lo = 21
-  while lo + PITCH_ZONE_SEMITONES - 1 <= 34 do
-    local mid = lo + half
-    PITCH_ZONES[#PITCH_ZONES + 1] = {lo=lo, hi=lo+PITCH_ZONE_SEMITONES-1, mid=mid}
-    lo = lo + PITCH_ZONE_SEMITONES
-  end
-  -- upper range
-  lo = 88
-  while lo + PITCH_ZONE_SEMITONES - 1 <= 108 do
-    local mid = lo + half
-    PITCH_ZONES[#PITCH_ZONES + 1] = {lo=lo, hi=lo+PITCH_ZONE_SEMITONES-1, mid=mid}
-    lo = lo + PITCH_ZONE_SEMITONES
-  end
-end
+-- Upper range MIDI 88-108 (E5-C7): 3 zones × 7 notes for pitched sample assignment.
+-- Lower range (21-34) is occupied by kit loader lower extras.
+local PITCH_ZONES = {
+  {lo=88,  hi=94,  mid=91},
+  {lo=95,  hi=101, mid=98},
+  {lo=102, hi=108, mid=105},
+}
 
 local function show_pitch_zones()
   local lines = {}
@@ -987,6 +1020,43 @@ end
 
 -- ── Kit loader ───────────────────────────────────────────────────────────────
 
+-- Load one voice group: resolve tag, pick WAV, create RS5k per note.
+-- pitch_center: if set, pitch_st = (note - pitch_center) per note (pitched toms).
+-- tag="" means WAVs live in the drum type root folder (Noise).
+local function load_voice(track, drum_type, tag, notes, pitch_center, stats)
+  local resolved_tag
+  if tag == "" then
+    resolved_tag = ""
+  else
+    resolved_tag = find_tag(drum_type, tag)
+    if not resolved_tag then stats.failed = stats.failed + 1; return end
+  end
+
+  local wav, path = pick_kit_wav(drum_type, resolved_tag)
+  if not wav then stats.failed = stats.failed + 1; return end
+
+  local is_noise = (drum_type == "Noise") and NOISE_LOOP_FILES[wav]
+  local display_tag = (resolved_tag ~= "") and resolved_tag or "(root)"
+
+  for _, note in ipairs(notes) do
+    local fx_idx = add_rs5k(track)
+    if fx_idx < 0 then stats.failed = stats.failed + 1 else
+      configure_rs5k(track, fx_idx, {
+        path     = path,
+        note_lo  = note,
+        note_hi  = note,
+        pitch_st = pitch_center and (note - pitch_center) or 0,
+        volume   = 0.8,
+        pan      = 0.5,
+        no_loop  = is_noise,
+        fx_name  = make_fx_name(note, 1, drum_type, display_tag),
+        meta     = {note=note, layer=1, drum_type=drum_type, tag=display_tag},
+      })
+      stats.loaded = stats.loaded + 1
+    end
+  end
+end
+
 local function load_kit_flow(track)
   local kit_names = {}
   for _, k in ipairs(KITS) do kit_names[#kit_names + 1] = k.name end
@@ -994,66 +1064,68 @@ local function load_kit_flow(track)
   if not n then return end
   local kit = KITS[n]
 
-  -- Check for existing instances
   local existing = scan_triaz_instances(track)
   if #existing > 0 then
     local choice = reaper.MB(
-      #existing .. " existing instance(s) on this track.\n\nYes = overwrite matching notes\nNo = add alongside\nCancel = abort",
+      #existing .. " existing instance(s) on this track.\n\nYes = overwrite all\nNo = add alongside\nCancel = abort",
       "Kit Load", 3
     )
-    if choice == 2 then return end  -- Cancel
-    if choice == 6 then             -- Yes: remove existing
-      for i = #existing, 1, -1 do
-        remove_rs5k(track, existing[i].fx_idx)
-      end
-    end
-    -- No: just add new alongside
-  end
-
-  -- Fixed rimshot for all kits
-  local rimshot_tag = find_tag("Perc Acoustic", "Rimshot")
-  if rimshot_tag then
-    local wav, path = pick_kit_wav("Perc Acoustic", rimshot_tag)
-    if wav then
-      local fx_idx = add_rs5k(track)
-      if fx_idx >= 0 then
-        configure_rs5k(track, fx_idx, {
-          path = path, note_lo = 37, note_hi = 37,
-          pitch_st = 0, volume = 0.8, pan = 0.5,
-          fx_name = make_fx_name(37, 1, "Perc Acoustic", rimshot_tag),
-        })
-      end
+    if choice == 2 then return end
+    if choice == 6 then
+      for i = #existing, 1, -1 do remove_rs5k(track, existing[i].fx_idx) end
     end
   end
 
-  local loaded, failed = 0, 0
-  for _, v in ipairs(kit.voices) do
-    local tag_hint = v.tag
-    local tag
-    if tag_hint ~= "" then tag = find_tag(v.type, tag_hint) end
-    if not tag then tag = list_dirs(TRIAZ_BASE .. v.type)[1] end
-    if not tag then failed = failed + 1; goto continue end
+  local stats = {loaded=0, failed=0}
 
-    local wav, path = pick_kit_wav(v.type, tag)
-    if not wav then failed = failed + 1; goto continue end
+  -- Rimshot: fixed across all kits
+  load_voice(track, RIMSHOT_DEFAULT[1], RIMSHOT_DEFAULT[2], {37}, nil, stats)
 
+  -- Kit-specific voices
+  for _, vkey in ipairs(KIT_VOICE_ORDER) do
+    if kit[vkey] then
+      load_voice(track, kit[vkey][1], kit[vkey][2], KIT_VOICE_NOTES[vkey], nil, stats)
+    end
+  end
+
+  -- Toms: pitched relative to center note 45 (Low Tom = normal pitch)
+  if kit.tom then
+    load_voice(track, kit.tom[1], kit.tom[2], TOM_NOTES, TOM_PITCH_CENTER, stats)
+  end
+
+  -- Fixed voices: same every kit
+  for _, v in ipairs(KIT_FIXED_VOICES) do
+    load_voice(track, v.type, v.tag, v.notes, nil, stats)
+  end
+
+  -- Lower extras: notes 21-34 (Perc Glitch / Layer / Noise / Foley)
+  for _, v in ipairs(KIT_LOWER_VOICES) do
+    load_voice(track, v.type, v.tag, v.notes, nil, stats)
+  end
+
+  -- Upper zones: 3 empty RS5k slots (E5-C7) for user-assigned pitched samples
+  for _, z in ipairs(KIT_UPPER_ZONES) do
     local fx_idx = add_rs5k(track)
-    if fx_idx < 0 then failed = failed + 1; goto continue end
-
-    local is_noise = (v.type == "Noise") and NOISE_LOOP_FILES[wav]
-    configure_rs5k(track, fx_idx, {
-      path = path, note_lo = v.note, note_hi = v.note,
-      pitch_st = 0, volume = 0.8, pan = 0.5, no_loop = is_noise,
-      fx_name = make_fx_name(v.note, 1, v.type, tag),
-    })
-    loaded = loaded + 1
-    ::continue::
+    if fx_idx >= 0 then
+      configure_rs5k(track, fx_idx, {
+        note_lo = z.lo,
+        note_hi = z.hi,
+        pitch_st = 0,
+        volume   = 0.8,
+        pan      = 0.5,
+        fx_name  = z.label,
+        meta     = {note=z.lo, layer=1, drum_type="Zone", tag=z.label},
+      })
+      stats.loaded = stats.loaded + 1
+    else
+      stats.failed = stats.failed + 1
+    end
   end
 
   reaper.MB(
-    string.format("Kit: %s\nLoaded: %d voices%s\n\nTweak individual voices via option 2.",
-      kit.name, loaded,
-      failed > 0 and ("\nFailed: " .. failed .. " (tag not found)") or ""
+    string.format("Kit: %s\nLoaded: %d  Failed: %d\n\nTom notes pitched ±%d st from %s.\nUpper zones E5-C7 empty — assign via Add sample.",
+      kit.name, stats.loaded, stats.failed,
+      6, note_name(TOM_PITCH_CENTER)
     ),
     "Kit Loaded", 0
   )
@@ -1176,6 +1248,115 @@ local function import_selected_items_flow(track)
   end
 end
 
+-- ── Randomize ────────────────────────────────────────────────────────────────
+
+local function random_wav_from(drum_type, tag)
+  local path = (tag and tag ~= "" and tag ~= "(root)")
+    and (TRIAZ_BASE .. drum_type .. "\\" .. tag)
+    or  (TRIAZ_BASE .. drum_type)
+  local wavs = list_wavs(path)
+  if #wavs == 0 then return nil, nil end
+  local wav = wavs[math.random(#wavs)]
+  return wav, path .. "\\" .. wav
+end
+
+local function random_tag_for(drum_type)
+  if drum_type == "Noise" then return "" end
+  local tags = list_dirs(TRIAZ_BASE .. drum_type)
+  if #tags == 0 then return "" end
+  return tags[math.random(#tags)]
+end
+
+local function apply_random_wav(track, inst, new_type, new_tag)
+  local info = inst.info
+  local dtype = new_type or info.drum_type
+  local tag   = new_tag  or info.tag
+  local wav, path = random_wav_from(dtype, tag)
+  if not wav then return false end
+  local is_noise   = (dtype == "Noise") and NOISE_LOOP_FILES[wav]
+  local disp_tag   = (tag ~= "" and tag ~= "(root)") and tag or "(root)"
+  configure_rs5k(track, inst.fx_idx, {
+    path    = path,
+    no_loop = is_noise,
+    fx_name = make_fx_name(info.note, info.layer, dtype, disp_tag),
+    meta    = {note=info.note, layer=info.layer, drum_type=dtype, tag=disp_tag},
+  })
+  return true, wav, path
+end
+
+local function randomize_flow(track)
+  math.randomseed(os.time())
+
+  local all = scan_triaz_instances(track)
+  local voices = {}
+  for _, inst in ipairs(all) do
+    if inst.info.drum_type ~= "Zone" then voices[#voices + 1] = inst end
+  end
+
+  if #voices == 0 then
+    reaper.MB("No voice instances on track. Load a kit first.", "Randomize", 0)
+    return
+  end
+
+  local modes = {
+    "1  Single voice — same type/tag, new random WAV",
+    "2  Entire kit  — same type/tag, new random WAV each voice",
+    "3  Entire kit  — random tag within same drum type",
+    "4  Full random — random type/tag/WAV every voice",
+  }
+  local mode = pick_from_list("Randomize", modes)
+  if not mode then return end
+
+  if mode == 1 then
+    local labels = {}
+    for _, inst in ipairs(voices) do
+      local i = inst.info
+      labels[#labels + 1] = string.format("note:%d (%s) — %s/%s",
+        i.note, note_name(i.note), i.drum_type, i.tag)
+    end
+    local n = pick_from_list("Pick Voice", labels)
+    if not n then return end
+
+    local inst = voices[n]
+    local ok, wav, path = apply_random_wav(track, inst, nil, nil)
+    if not ok then
+      reaper.MB("No WAVs found for " .. inst.info.drum_type .. "/" .. inst.info.tag, "Error", 0)
+      return
+    end
+    preview_wav(path)
+    reaper.MB(wav .. "\n" .. note_name(inst.info.note) .. " — " .. inst.info.drum_type .. "/" .. inst.info.tag,
+      "Randomized", 0)
+    stop_preview()
+
+  elseif mode == 2 then
+    local changed, failed = 0, 0
+    for _, inst in ipairs(voices) do
+      if apply_random_wav(track, inst, nil, nil) then changed = changed + 1
+      else failed = failed + 1 end
+    end
+    reaper.MB(string.format("Randomized %d voices. Failed: %d.", changed, failed), "Done", 0)
+
+  elseif mode == 3 then
+    local changed, failed = 0, 0
+    for _, inst in ipairs(voices) do
+      local new_tag = random_tag_for(inst.info.drum_type)
+      if apply_random_wav(track, inst, nil, new_tag) then changed = changed + 1
+      else failed = failed + 1 end
+    end
+    reaper.MB(string.format("Randomized %d voices (new tags). Failed: %d.", changed, failed), "Done", 0)
+
+  elseif mode == 4 then
+    local changed, failed = 0, 0
+    for _, inst in ipairs(voices) do
+      local new_type = DRUM_TYPES[math.random(#DRUM_TYPES)]
+      local new_tag  = random_tag_for(new_type)
+      if apply_random_wav(track, inst, new_type, new_tag) then changed = changed + 1
+      else failed = failed + 1 end
+    end
+    reaper.MB(string.format("Full random: %d voices. Failed: %d.", changed, failed), "Done", 0)
+  end
+end
+
 -- ── Main ──────────────────────────────────────────────────────────────────────
 
 local function main()
@@ -1200,12 +1381,13 @@ local function main()
       string.format("Import selected items (%d selected)", sel_count),
       "Load kit preset (15 kits)",
       string.format("Tweak existing (%d instance%s)", inst_count, inst_count == 1 and "" or "s"),
+      "Randomize",
       "Switch track",
       "Exit",
     }
 
     local choice = pick_from_list("TRIAZ RS5k Browser", menu_items)
-    if not choice or choice == 7 then break end
+    if not choice or choice == 8 then break end
 
     if choice == 1 then
       add_assignment_flow(track)
@@ -1218,6 +1400,8 @@ local function main()
     elseif choice == 5 then
       tweak_mode(track)
     elseif choice == 6 then
+      randomize_flow(track)
+    elseif choice == 7 then
       local new_track = select_track()
       if new_track then track = new_track end
     end

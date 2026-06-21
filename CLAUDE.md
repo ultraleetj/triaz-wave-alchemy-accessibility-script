@@ -110,12 +110,32 @@ Main entry: `main()` → select/create track → action loop:
 3. Import selected media items → assign to notes
 4. Load kit (15 preset kits)
 5. Tweak mode (edit existing RS5k instances)
-6. Switch track
+6. Randomize
+7. Switch track
 
 **Metadata:** stored via `SetProjExtState` keyed by FX name (`note|layer|drum_type|tag`).
 Scan: `scan_triaz_instances(track)` reads all RS5k FX names + metadata on track.
 
 **Preview flow:** `preview_wav(path)` → MB dialog blocks → `stop_preview()` on close.
+
+### Kit loader (load_kit_flow)
+
+Loads voices in order: rimshot (fixed) → kit voices (KIT_VOICE_ORDER) → toms (pitched) → fixed GM voices (KIT_FIXED_VOICES) → lower extras 21–34 (KIT_LOWER_VOICES) → 3 empty upper zones 88–108 (KIT_UPPER_ZONES).
+
+Kit definitions mirror `generate_kits.py` exactly (primary + alt voices per kit).
+Tom notes {41,43,45,47,48,50} pitched via `pitch_st = note - 45` (Low Tom = center, 0 st).
+Upper zones (E5–C7, MIDI 88–108): 3 × 7-note empty RS5k slots, labeled "zone N (E5-A#5)" etc.
+Zones show in tweak mode as drum_type="Zone"; user fills via Add assignment flow.
+
+### Randomize (randomize_flow)
+
+4 modes (skips Zone instances):
+1. **Single voice** — pick one instance, same drum_type/tag, random WAV + preview
+2. **Entire kit** — all voices, same drum_type/tag each, random WAV
+3. **Entire kit + tags** — all voices, random tag within same drum_type, random WAV
+4. **Full random** — all voices, random drum_type + tag + WAV
+
+`math.randomseed(os.time())` called per invocation. Updates RS5k FILE0 + metadata.
 
 ---
 
@@ -201,8 +221,4 @@ All other drum types verified clean — no embedded loops.
 ## TODO
 
 ### Future
-- **Randomize feature** — two modes:
-  1. Randomize already-assigned voices: for each RS5k on the track, pick a random WAV from the same drum type + tag (or sibling cluster) and reassign
-  2. Random kit from scratch: pick random drum type/tag/WAV for each GM voice, assign to standard notes (36=kick, 38=snare, 42=hh_c, etc.)
-  - Could offer: same type only / same tag cluster / full random
-  - Seed option for reproducibility
+- Nothing currently planned.
