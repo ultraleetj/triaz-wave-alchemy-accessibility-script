@@ -1935,6 +1935,8 @@ LOAD KIT
   Toms are pitched and panned across the stereo field automatically.
   Three empty zone slots at notes 88–108 (E5–C7) are created for pitched
   samples — assign to them via Add / assign sample (enter zone # in dialog).
+  NOTE: loading a kit can take up to 25 seconds — REAPER will be unresponsive
+  while it scans the sample library. This is normal; wait for it to finish.
 
 TWEAK
   At the top of the submenu:
@@ -1970,6 +1972,8 @@ CYCLE SAMPLES  (inside Tweak submenu)
   Picking any WAV from the list swaps it immediately.
   Toms: all 6 instances swap to the same WAV at once.
   Zones: pick which zone first, then cycle that zone independently.
+  NOTE: first time opening a tag's file list may pause up to 25 seconds
+  while the library folder is scanned. Subsequent opens are instant (cached).
 
 RANDOMIZE
   Four modes:
