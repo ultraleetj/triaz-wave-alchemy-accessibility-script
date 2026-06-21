@@ -1457,8 +1457,8 @@ local function show_main_menu(track)
   local sel_paths = {}
   local sel_count = reaper.CountSelectedMediaItems(0)
   for i = 0, sel_count - 1 do
-    local item = reaper.GetSelectedMediaItem(0, i)
-    local take  = item and reaper.GetActiveTake(item)
+    local mi   = reaper.GetSelectedMediaItem(0, i)
+    local take = mi and reaper.GetActiveTake(mi)
     if take and not reaper.TakeIsMIDI(take) then
       local src  = reaper.GetMediaItemTake_Source(take)
       local path = src and reaper.GetMediaSourceFileName(src, "")
@@ -1469,9 +1469,10 @@ local function show_main_menu(track)
   local parts   = {}
   local actions = {}
 
-  local function item(label, fn)
+  local function add(label, fn)
     parts[#parts + 1]   = label
-    actions[#actions + 1] = fn
+    actions[#actions + 1] = fn or false
+    return #parts   -- returns position of just-added item
   end
   local function open_sub(label)
     parts[#parts + 1]   = ">" .. label
@@ -1482,30 +1483,30 @@ local function show_main_menu(track)
     actions[#actions + 1] = false
   end
 
-  item("Add / assign sample", function() add_assignment_flow(track) end)
-  item("Quick assign",        function() quick_assign_flow(track) end)
+  add("Add / assign sample", function() add_assignment_flow(track) end)
+  add("Quick assign",        function() quick_assign_flow(track) end)
 
   -- Import submenu
   if #sel_paths > 0 then
     open_sub(string.format("Import selected (%d)", #sel_paths))
     if #sel_paths > 1 then
-      item("Import all (sequential)", function() import_selected_items_flow(track) end)
+      add("Import all (sequential)", function() import_selected_items_flow(track) end)
     end
     for _, path in ipairs(sel_paths) do
       local name = path:match("[^\\/]+$") or path
       local p    = path
-      item(name, function() import_item_flow(track, p) end)
+      add(name, function() import_item_flow(track, p) end)
     end
     close_sub()
   else
-    item("#Import selected (0)", false)
+    add("#Import selected (0)")
   end
 
   -- Load kit submenu
   open_sub("Load kit")
   for i, k in ipairs(KITS) do
     local idx = i
-    item(k.name, function() load_kit_flow(track, idx) end)
+    add(k.name, function() load_kit_flow(track, idx) end)
   end
   close_sub()
 
@@ -1515,36 +1516,27 @@ local function show_main_menu(track)
     for i, inst in ipairs(instances) do
       local info = inst.info
       local idx  = i
-      item(
+      add(
         string.format("L%d %s — %s/%s", info.layer, note_name(info.note), info.drum_type, info.tag),
         function() tweak_mode(track, idx) end
       )
     end
     close_sub()
   else
-    item("#Tweak (0 instances)", false)
+    add("#Tweak (0 instances)")
   end
 
-  item("Randomize",    function() randomize_flow(track) end)
-  item("Switch track", false)   -- handled specially below
-  item("Exit",         false)   -- handled specially below
+  add("Randomize", function() randomize_flow(track) end)
+  local switch_pos = add("Switch track")
+  local exit_pos   = add("Exit")
 
   gfx.init("TRIAZ RS5k Browser", 0, 0, 0, 0, 0)
   gfx.x, gfx.y = 0, 0
   local choice = gfx.showmenu(table.concat(parts, "|"))
   gfx.quit()
 
-  if choice == 0 then return true, track end  -- escaped = stay open
-
-  -- Find "Switch track" and "Exit" positions dynamically
-  local switch_pos, exit_pos = 0, 0
-  for i, p in ipairs(parts) do
-    if p == "Switch track" then switch_pos = i end
-    if p == "Exit"         then exit_pos   = i end
-  end
-
-  if choice == exit_pos then return false, track end
-
+  if choice == 0       then return true,  track end
+  if choice == exit_pos   then return false, track end
   if choice == switch_pos then
     local new_track = select_track()
     return true, new_track or track
