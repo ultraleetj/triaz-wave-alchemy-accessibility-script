@@ -665,12 +665,12 @@ end
 local function ask_note(default_note, drum_type)
   local suggestion = ""
   local gm = GM_SUGGESTIONS[drum_type]
-  if gm then suggestion = tostring(gm[1]) end
+  if gm then suggestion = note_name(gm[1]) end
 
-  local default = default_note and tostring(default_note) or suggestion
+  local default = default_note and note_name(default_note) or suggestion
   local val = ask_string(
-    "Target MIDI Note",
-    string.format("MIDI note number (0-127) or name (e.g. C2) [%s suggested]", suggestion),
+    "Target Note",
+    string.format("Note (e.g. C2, D#4) [suggested: %s]", suggestion),
     default
   )
   if not val then return nil end
@@ -850,8 +850,8 @@ local function tweak_mode(track)
   for _, inst in ipairs(instances) do
     local i = inst.info
     labels[#labels + 1] = string.format(
-      "L%d note:%d (%s) — %s/%s",
-      i.layer, i.note, note_name(i.note), i.drum_type, i.tag
+      "L%d %s — %s/%s",
+      i.layer, note_name(i.note), i.drum_type, i.tag
     )
   end
 
@@ -948,14 +948,14 @@ local function add_assignment_flow(track)
   local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
 
   local captions = table.concat({
-    "MIDI note (0-127 or name; suggested=" .. gm_note .. ")",
+    "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. ")",
     "Layer (1-3; 1=new slot)",
     "Pitch zone # (0=none; zones: " .. zone_hint .. ")",
     "Volume dB (0=unity)",
     "Pan % (-100=L  0=C  100=R)",
     "Pitch shift semitones (-24 to +24)",
   }, ",")
-  local defaults = gm_note .. ",1,0,0,0,0"
+  local defaults = note_name(gm_note) .. ",1,0,0,0,0"
 
   local ok, result = reaper.GetUserInputs(
     "Assign: " .. wav_name, 6, captions, defaults
@@ -1188,8 +1188,8 @@ local function quick_assign_flow(track)
   local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
   local ok, result = reaper.GetUserInputs(
     "Quick Assign: " .. wav_name, 2,
-    "MIDI note (0-127 or name; suggested=" .. gm_note .. "),Layer (1-3)",
-    gm_note .. ",1"
+    "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
+    note_name(gm_note) .. ",1"
   )
   if not ok then return end
 
@@ -1267,8 +1267,8 @@ local function import_selected_items_flow(track)
     local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
     local ok, result = reaper.GetUserInputs(
       string.format("Item %d/%d: %s", idx, #items, wav_name), 2,
-      "MIDI note (0-127 or name; suggested=" .. gm_note .. "),Layer (1-3)",
-      gm_note .. ",1"
+      "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
+      note_name(gm_note) .. ",1"
     )
     if not ok then break end
 
@@ -1361,8 +1361,8 @@ local function randomize_flow(track)
     local labels = {}
     for _, inst in ipairs(voices) do
       local i = inst.info
-      labels[#labels + 1] = string.format("note:%d (%s) — %s/%s",
-        i.note, note_name(i.note), i.drum_type, i.tag)
+      labels[#labels + 1] = string.format("%s — %s/%s",
+        note_name(i.note), i.drum_type, i.tag)
     end
     local n = pick_from_list("Pick Voice", labels)
     if not n then return end
