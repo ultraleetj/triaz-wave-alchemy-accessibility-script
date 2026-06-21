@@ -706,6 +706,57 @@ local function browse_sample()
   return wav_name, full_path, drum_type, tag
 end
 
+-- ── Source picker: file browser or from selected timeline items ───────────────
+-- Returns wav_name, full_path, drum_type, tag — same contract as browse_sample().
+-- When no items are selected on timeline, goes straight to file browser.
+-- When items are selected, offers submenu: Browse file | From selected item.
+
+local function pick_source()
+  local sel_paths = {}
+  local sel_count = reaper.CountSelectedMediaItems(0)
+  for i = 0, sel_count - 1 do
+    local mi   = reaper.GetSelectedMediaItem(0, i)
+    local take = mi and reaper.GetActiveTake(mi)
+    if take and not reaper.TakeIsMIDI(take) then
+      local src  = reaper.GetMediaItemTake_Source(take)
+      local path = src and reaper.GetMediaSourceFileName(src, "")
+      if path and path ~= "" then sel_paths[#sel_paths + 1] = path end
+    end
+  end
+
+  if #sel_paths == 0 then return browse_sample() end
+
+  -- Build source submenu
+  local choices = {"Browse file"}
+  if #sel_paths == 1 then
+    local name = sel_paths[1]:match("[^\\/]+$") or sel_paths[1]
+    choices[#choices + 1] = "From selected: " .. name
+  else
+    choices[#choices + 1] = string.format("From selected item (%d available)", #sel_paths)
+  end
+
+  local pick = pick_from_list("Sample source", choices)
+  if not pick then return nil end
+  if pick == 1 then return browse_sample() end
+
+  local source_path
+  if #sel_paths == 1 then
+    source_path = sel_paths[1]
+  else
+    local names = {}
+    for _, p in ipairs(sel_paths) do names[#names + 1] = p:match("[^\\/]+$") or p end
+    local n = pick_from_list("Pick item", names)
+    if not n then return nil end
+    source_path = sel_paths[n]
+  end
+
+  local wav_name = source_path:match("[^\\/]+$") or source_path
+  local drum_type, tag = parse_triaz_path(source_path)
+  drum_type = drum_type or "Unknown"
+  tag       = tag       or ""
+  return wav_name, source_path, drum_type, tag
+end
+
 -- ── Note input ───────────────────────────────────────────────────────────────
 
 local function ask_note(default_note, drum_type)
@@ -929,7 +980,7 @@ local function run_assign_dialog(track, wav_name, full_path, drum_type, tag, def
       return fx_idx
     elseif choice == 7 then   -- No: try another sample
       remove_rs5k(track, fx_idx)
-      local new_wav, new_path, new_type, new_tag = browse_sample()
+      local new_wav, new_path, new_type, new_tag = pick_source()
       if not new_wav then return nil end
       wav_name, full_path, drum_type, tag = new_wav, new_path, new_type, new_tag
     else                      -- Cancel: discard
@@ -1034,6 +1085,7 @@ local function tweak_mode(track, inst_n, action_n)
     local choices = {
       "Swap sample (re-browse)",
       "Edit parameters (vol / pan / pitch / attack / voices)",
+      "Assign to pitch zone",
       "Preview current sample",
       "Dump RS5k params (diagnostic)",
       "Remove this instance",
@@ -1043,7 +1095,7 @@ local function tweak_mode(track, inst_n, action_n)
   end
 
   if action == 1 then
-    local new_wav, new_path, new_type, new_tag = browse_sample()
+    local new_wav, new_path, new_type, new_tag = pick_source()
     if not new_wav then return end
 
     local is_noise = (new_type == "Noise") and NOISE_LOOP_FILES[new_wav]
@@ -1084,6 +1136,44 @@ local function tweak_mode(track, inst_n, action_n)
     end
 
   elseif action == 3 then
+    -- Reassign current sample to a pitch zone (MODE=0, note range = zone, pitched per key)
+    local zone_lines = {}
+    for i, z in ipairs(PITCH_ZONES) do
+      zone_lines[#zone_lines + 1] = string.format(
+        "%d: %s–%s (center %s)", i, note_name(z.lo), note_name(z.hi), note_name(z.mid)
+      )
+    end
+    local zn = pick_from_list("Assign to pitch zone", zone_lines)
+    if not zn then return end
+    local zone = PITCH_ZONES[zn]
+
+    local ok_scale, scale_str = reaper.GetUserInputs(
+      "Zone pitch scale", 1,
+      "Pitch scale (1.0=1st/key  neg=invert  0=no shift)",
+      "1.0"
+    )
+    if not ok_scale then return end
+    local zone_pitch_scale = tonumber(scale_str) or 1.0
+
+    local pnlo = (zone.lo - zone.mid) * zone_pitch_scale
+    local pnhi = (zone.hi - zone.mid) * zone_pitch_scale
+    local new_fx_name = make_fx_name(zone.mid, info.layer, info.drum_type, info.tag)
+
+    configure_rs5k(track, fx_idx, {
+      note_lo       = zone.lo,
+      note_hi       = zone.hi,
+      pitch_note_lo = pnlo,
+      pitch_note_hi = pnhi,
+      mode          = 0,
+      fx_name       = new_fx_name,
+    })
+    save_meta(track, fx_idx, zone.mid, info.layer, info.drum_type, info.tag)
+    reaper.MB(
+      string.format("Reassigned to zone %s–%s.", note_name(zone.lo), note_name(zone.hi)),
+      "Done", 0
+    )
+
+  elseif action == 4 then
     if ok_f and cur_file ~= "" then
       preview_wav(cur_file)
       reaper.MB("Playing preview. Close to stop.", "Preview", 0)
@@ -1092,10 +1182,10 @@ local function tweak_mode(track, inst_n, action_n)
       reaper.MB("No sample loaded.", "Preview", 0)
     end
 
-  elseif action == 4 then
+  elseif action == 5 then
     dump_rs5k_params(track, fx_idx)
 
-  elseif action == 5 then
+  elseif action == 6 then
     if ask_yes_no("Remove this RS5k instance?", "Confirm Remove") then
       remove_rs5k(track, fx_idx)
       reaper.MB("Removed.", "Done", 0)
@@ -1106,7 +1196,7 @@ end
 -- ── Add new assignment flow ───────────────────────────────────────────────────
 
 local function add_assignment_flow(track)
-  local wav_name, full_path, drum_type, tag = browse_sample()
+  local wav_name, full_path, drum_type, tag = pick_source()
   if not wav_name then return end
   run_assign_dialog(track, wav_name, full_path, drum_type, tag, nil)
 end
@@ -1256,7 +1346,7 @@ end
 -- Browse file → minimal 2-field dialog (note + layer) → assign → preview
 
 local function quick_assign_flow(track)
-  local wav_name, full_path, drum_type, tag = browse_sample()
+  local wav_name, full_path, drum_type, tag = pick_source()
   if not wav_name then return end
 
   local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
@@ -1288,7 +1378,7 @@ local function quick_assign_flow(track)
     remove_rs5k(track, fx_idx)
 
     if res == 7 then  -- No: browse again
-      local new_wav, new_path, new_type, new_tag = browse_sample()
+      local new_wav, new_path, new_type, new_tag = pick_source()
       if not new_wav then return end
       wav_name, full_path, drum_type, tag = new_wav, new_path, new_type, new_tag
     else  -- Cancel: discard
@@ -1369,39 +1459,6 @@ local function import_selected_items_flow(track)
 
     ::continue::
   end
-end
-
--- ── Import single item (used by main menu import submenu) ────────────────────
-
-local function import_item_flow(track, full_path)
-  local wav_name = full_path:match("[^\\/]+$") or full_path
-  local drum_type, tag = parse_triaz_path(full_path)
-  drum_type = drum_type or "Unknown"
-  tag       = tag       or ""
-
-  local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
-  local note_default = pick_note_default(gm_note)
-  local ok, result = reaper.GetUserInputs(
-    wav_name, 2,
-    "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
-    note_default .. ",1"
-  )
-  if not ok then return end
-
-  local note, layer = parse_note_layer(result)
-  if not note then reaper.MB("Invalid note.", "Error", 0); return end
-
-  local assign_ok, fx_idx = assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, nil)
-  if not assign_ok then return end
-
-  preview_wav(full_path)
-  local res = reaper.MB(
-    string.format("%s\nNote: %s  L%d\n\nYes = keep   No = discard",
-      wav_name, note_name(note), layer),
-    "Keep?", 4
-  )
-  stop_preview()
-  if res ~= 6 then remove_rs5k(track, fx_idx) end
 end
 
 -- ── Randomize ────────────────────────────────────────────────────────────────
@@ -1575,9 +1632,10 @@ QUICK ASSIGN
   Faster for simple assignments.
 
 IMPORT SELECTED
-  If you have audio items selected on the REAPER timeline, this menu lets
-  you assign each one to RS5k. Each file gets its own note + layer dialog,
-  then a preview. Only appears when items are selected.
+  Batch-assigns all selected timeline audio items to RS5k. Each file gets
+  its own note + layer dialog, then a preview. Only appears when items are
+  selected. To assign a single timeline item, use Add / assign sample instead
+  — it offers "From selected item" as a source option.
 
 LOAD KIT
   Loads a full drum kit in one shot — 15 preset kits to choose from.
@@ -1588,11 +1646,12 @@ LOAD KIT
 
 TWEAK
   Lists all RS5k instances on the track. Pick one, then choose:
-    - Swap sample      Replace with a different WAV
-    - Edit parameters  Vol dB, pan %, pitch semitones, attack, max voices
-    - Preview          Play the current sample
-    - Dump RS5k params Show all internal parameter values (diagnostic)
-    - Remove           Delete this RS5k instance
+    - Swap sample         Replace with a different WAV (file browser or timeline item)
+    - Edit parameters     Vol dB, pan %, pitch semitones, attack, max voices
+    - Assign to pitch zone  Move to one of the 3 upper pitch zones (E5-C7, MODE=0)
+    - Preview             Play the current sample
+    - Dump RS5k params    Show all internal parameter values (diagnostic)
+    - Remove              Delete this RS5k instance
 
 RANDOMIZE
   Four modes:
@@ -1737,18 +1796,10 @@ local function show_main_menu(track)
   add("Add / assign sample", function() add_assignment_flow(track) end)
   add("Quick assign",        function() quick_assign_flow(track) end)
 
-  -- Import submenu
+  -- Import selected: flat item, batch only (single-item access via Add / assign)
   if #sel_paths > 0 then
-    open_sub(string.format("Import selected (%d)", #sel_paths))
-    if #sel_paths > 1 then
-      add("Import all (sequential)", function() import_selected_items_flow(track) end)
-    end
-    for _, path in ipairs(sel_paths) do
-      local name = path:match("[^\\/]+$") or path
-      local p    = path
-      add(name, function() import_item_flow(track, p) end)
-    end
-    close_sub()
+    add(string.format("Import selected (%d)", #sel_paths),
+      function() import_selected_items_flow(track) end)
   else
     add("#Import selected (0)")
   end
@@ -1771,9 +1822,10 @@ local function show_main_menu(track)
       open_sub(label)
       add("Swap sample",          function() tweak_mode(track, idx, 1) end)
       add("Edit parameters",      function() tweak_mode(track, idx, 2) end)
-      add("Preview",              function() tweak_mode(track, idx, 3) end)
-      add("Dump RS5k params",     function() tweak_mode(track, idx, 4) end)
-      add("Remove",               function() tweak_mode(track, idx, 5) end)
+      add("Assign to pitch zone", function() tweak_mode(track, idx, 3) end)
+      add("Preview",              function() tweak_mode(track, idx, 4) end)
+      add("Dump RS5k params",     function() tweak_mode(track, idx, 5) end)
+      add("Remove",               function() tweak_mode(track, idx, 6) end)
       close_sub()
     end
     close_sub()
