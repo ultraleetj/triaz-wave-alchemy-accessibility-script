@@ -308,8 +308,8 @@ local RIMSHOT_DEFAULT  = {"Perc Acoustic", "Rimshot"}
 local TOM_NOTES        = {41,43,45,47,48,50}
 local TOM_PITCH_CENTER = 45
 local TOM_PITCH_SCALE  = 0.5   -- compress semitone spread (full = 1.0)
-local TOM_PAN_R        = 0.75  -- lowest tom (41) pan position
-local TOM_PAN_L        = 0.25  -- highest tom (50) pan position
+local TOM_PAN_LOW      = 0.25  -- lowest tom (41) pan — left
+local TOM_PAN_HIGH     = 0.75  -- highest tom (50) pan — right
 
 -- HH Open release: param 27 enables note-off release override; param 26 = release time.
 -- Normalized 0.05 ≈ 50ms estimated — adjust HH_OPEN_RELEASE_NORM after testing.
@@ -1129,7 +1129,7 @@ local function load_kit_flow(track)
   if kit.tom then
     local pan_list = {}
     for i = 1, #TOM_NOTES do
-      pan_list[i] = TOM_PAN_R - (i - 1) / (#TOM_NOTES - 1) * (TOM_PAN_R - TOM_PAN_L)
+      pan_list[i] = TOM_PAN_LOW + (i - 1) / (#TOM_NOTES - 1) * (TOM_PAN_HIGH - TOM_PAN_LOW)
     end
     load_voice(track, kit.tom[1], kit.tom[2], TOM_NOTES, TOM_PITCH_CENTER, stats,
       {pitch_scale = TOM_PITCH_SCALE, pan_list = pan_list})

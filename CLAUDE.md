@@ -247,4 +247,4 @@ All other drum types verified clean — no embedded loops.
 ### Pending
 - **HH Open release value** — `HH_OPEN_RELEASE_NORM = 0.05` is an estimate. Param 26 range unknown. Test: load kit, play HH Open, listen for fade vs hard cut. Adjust constant and redeploy if too long or too short.
 - **Tom pitch scale** — `TOM_PITCH_SCALE = 0.5` halves spread to ~-2/+3 st from center note 45. Adjust if still too wide/narrow.
-- **Tom pan spread** — `TOM_PAN_R = 0.75`, `TOM_PAN_L = 0.25` (±25%). Adjust for wider/narrower stereo image.
+- **Tom pan spread** — `TOM_PAN_LOW = 0.25` (note 41, left), `TOM_PAN_HIGH = 0.75` (note 50, right). Adjust for wider/narrower stereo image.
