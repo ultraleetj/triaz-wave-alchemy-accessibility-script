@@ -1093,7 +1093,12 @@ local function tweak_mode(track, inst_n, action_n)
     "Remove this instance",
   }
 
-  -- Loop: non-terminal actions (Preview, Dump) return here; terminal ones exit.
+  -- All actions loop back to picker. Confirmed remove (action 5) is the only exit.
+  local function refresh_file()
+    ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, fx_idx, "FILE0")
+    cur_wav = (ok_f and cur_file ~= "") and (cur_file:match("[^\\/]+$") or cur_file) or "?"
+  end
+
   local next_action = action_n
   while true do
     local action = next_action
@@ -1101,11 +1106,6 @@ local function tweak_mode(track, inst_n, action_n)
     if not action then
       action = pick_from_list("Edit: " .. cur_wav, choices)
       if not action then return end
-    end
-
-    local function refresh_file()
-      ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, fx_idx, "FILE0")
-      cur_wav = (ok_f and cur_file ~= "") and (cur_file:match("[^\\/]+$") or cur_file) or "?"
     end
 
     if action == 1 then
@@ -1117,6 +1117,8 @@ local function tweak_mode(track, inst_n, action_n)
           no_loop = is_noise,
           fx_name = make_fx_name(info.note, info.layer, new_type, new_tag),
         })
+        info.drum_type = new_type
+        info.tag       = new_tag
         refresh_file()
       end
       -- loop back to picker
@@ -1159,10 +1161,11 @@ local function tweak_mode(track, inst_n, action_n)
         force_new        = true,
       })
       if new_fx then
-        remove_rs5k(track, fx_idx)
-        fx_idx = new_fx
+        local old_fx_idx = fx_idx
+        remove_rs5k(track, old_fx_idx)
+        fx_idx = (new_fx > old_fx_idx) and (new_fx - 1) or new_fx
+        refresh_file()
       end
-      refresh_file()
       -- loop back to picker
 
     elseif action == 3 then

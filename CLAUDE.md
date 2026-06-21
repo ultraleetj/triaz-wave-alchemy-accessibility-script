@@ -177,7 +177,7 @@ Zone instances: metadata `note` = zone.mid (91/98/105); detected by matching PIT
 
 **Preview flow:** `preview_wav(path)` → MB dialog blocks → `stop_preview()` on close.
 
-**tweak_mode loop:** actions 3 (Preview) and 4 (Dump) are non-terminal — after completing they loop back to the per-instance action picker. Actions 1 (Swap), 2 (Edit), 5 (Remove) are terminal and return to main menu. When called with pre-set `action_n` from the menu, `next_action` is set to nil after first iteration so subsequent loops always show the picker.
+**tweak_mode loop:** all actions loop back to the per-instance action picker. Only confirmed remove (action 5 — user answers Yes) exits; cancelled remove loops back. When called with pre-set `action_n` from the menu, `next_action` is set to nil after first iteration so subsequent loops always show the picker. Picker title shows "Edit: &lt;cur_wav&gt;" — filename change after swap is implicit confirmation. After action 1 (Swap), `info.drum_type` and `info.tag` are updated in-place so action 2 (Edit) gets correct defaults. After action 2, `fx_idx` is corrected for the index shift caused by removing the old instance before the new one's index (`fx_idx = new_fx - 1` when `new_fx > old_fx_idx`).
 
 **scan_non_zone_instances(track):** shared helper used by `cycle_samples_flow` and `randomize_flow`; returns all instances where `drum_type ~= "Zone"`.
 
