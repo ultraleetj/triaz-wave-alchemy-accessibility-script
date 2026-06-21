@@ -245,4 +245,6 @@ All other drum types verified clean — no embedded loops.
 ## TODO
 
 ### Pending
-- **HH Open smooth note-off release** — set param 27 (Use note-off release override) = 1 and param 26 (Release note-off) ≈ 50ms normalized value for HiHat Open instances in kit loader. Currently hard-cuts on note-off. Need to determine normalized value for ~50ms (unknown range — requires test). Also add `release_note_off` and `use_note_off_rel` to RS5K_PARAM table and handle in `configure_rs5k`.
+- **HH Open release value** — `HH_OPEN_RELEASE_NORM = 0.05` is an estimate. Param 26 range unknown. Test: load kit, play HH Open, listen for fade vs hard cut. Adjust constant and redeploy if too long or too short.
+- **Tom pitch scale** — `TOM_PITCH_SCALE = 0.5` halves spread to ~-2/+3 st from center note 45. Adjust if still too wide/narrow.
+- **Tom pan spread** — `TOM_PAN_R = 0.75`, `TOM_PAN_L = 0.25` (±25%). Adjust for wider/narrower stereo image.

@@ -307,6 +307,13 @@ local KIT_VOICE_NOTES = {
 local RIMSHOT_DEFAULT  = {"Perc Acoustic", "Rimshot"}
 local TOM_NOTES        = {41,43,45,47,48,50}
 local TOM_PITCH_CENTER = 45
+local TOM_PITCH_SCALE  = 0.5   -- compress semitone spread (full = 1.0)
+local TOM_PAN_R        = 0.75  -- lowest tom (41) pan position
+local TOM_PAN_L        = 0.25  -- highest tom (50) pan position
+
+-- HH Open release: param 27 enables note-off release override; param 26 = release time.
+-- Normalized 0.05 ≈ 50ms estimated — adjust HH_OPEN_RELEASE_NORM after testing.
+local HH_OPEN_RELEASE_NORM = 0.05
 
 -- Fixed voices: same across all kits, GM range
 local KIT_FIXED_VOICES = {
@@ -377,9 +384,11 @@ local RS5K_PARAM = {
   gain_min_vel  = 2,   -- Gain at velocity 0: 0=silent (velocity sensitive), 1=full (flat)
   note_lo       = 3,   -- Note range start: 0..1 mapped from MIDI 0..127
   note_hi       = 4,   -- Note range end:   0..1 mapped from MIDI 0..127
-  loop          = 12,  -- Loop: 0=no loop, 1=loop
-  obey_note_off = 11,  -- 0=one-shot (play to end), 1=stop on note-off
-  pitch_st      = 15,  -- Pitch adjust: normalized 0..1 where 0.5 = 0 semitones
+  loop             = 12,  -- Loop: 0=no loop, 1=loop
+  obey_note_off    = 11,  -- 0=one-shot (play to end), 1=stop on note-off
+  pitch_st         = 15,  -- Pitch adjust: normalized 0..1 where 0.5 = 0 semitones
+  release_note_off = 26,  -- Release time after note-off
+  use_note_off_rel = 27,  -- 0=off, 1=use param 26 for note-off release
 }
 
 local function midi_to_param(midi) return midi / 127.0 end
@@ -515,6 +524,10 @@ local function configure_rs5k(track, fx_idx, params)
   if params.obey_note_off ~= nil then
     reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.obey_note_off,
       params.obey_note_off and 1.0 or 0.0)
+  end
+  if params.hh_open_release then
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.use_note_off_rel, 1.0)
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.release_note_off, HH_OPEN_RELEASE_NORM)
   end
   -- fx_name via named config parm (display only, not used for scanning)
   if params.fx_name then
@@ -1033,7 +1046,10 @@ end
 -- Load one voice group: resolve tag, pick WAV, create RS5k per note.
 -- pitch_center: if set, pitch_st = (note - pitch_center) per note (pitched toms).
 -- tag="" means WAVs live in the drum type root folder (Noise).
-local function load_voice(track, drum_type, tag, notes, pitch_center, stats)
+-- opts (optional): { pitch_scale=number, pan_list=table }
+-- pitch_scale compresses the semitone spread (1.0 = full, 0.5 = half).
+-- pan_list[i] overrides pan for the i-th note in the notes array.
+local function load_voice(track, drum_type, tag, notes, pitch_center, stats, opts)
   local resolved_tag
   if tag == "" then
     resolved_tag = ""
@@ -1045,24 +1061,31 @@ local function load_voice(track, drum_type, tag, notes, pitch_center, stats)
   local wav, path = pick_kit_wav(drum_type, resolved_tag)
   if not wav then stats.failed = stats.failed + 1; return end
 
-  local is_noise   = (drum_type == "Noise") and NOISE_LOOP_FILES[wav]
-  local is_hh_open = (drum_type == "HiHat Open")
+  local is_noise    = (drum_type == "Noise") and NOISE_LOOP_FILES[wav]
+  local is_hh_open  = (drum_type == "HiHat Open")
   local display_tag = (resolved_tag ~= "") and resolved_tag or "(root)"
+  local pitch_scale = (opts and opts.pitch_scale) or 1.0
+  local pan_list    = opts and opts.pan_list
 
-  for _, note in ipairs(notes) do
+  for k, note in ipairs(notes) do
     local fx_idx = add_rs5k(track)
     if fx_idx < 0 then stats.failed = stats.failed + 1 else
+      local pitch_st = 0
+      if pitch_center then
+        pitch_st = math.floor((note - pitch_center) * pitch_scale + 0.5)
+      end
       configure_rs5k(track, fx_idx, {
-        path          = path,
-        note_lo       = note,
-        note_hi       = note,
-        pitch_st      = pitch_center and (note - pitch_center) or 0,
-        volume        = 0.8,
-        pan           = 0.5,
-        no_loop       = is_noise,
-        obey_note_off = is_noise or is_hh_open,  -- Noise + HH Open stop on note-off
-        fx_name       = make_fx_name(note, 1, drum_type, display_tag),
-        meta          = {note=note, layer=1, drum_type=drum_type, tag=display_tag},
+        path             = path,
+        note_lo          = note,
+        note_hi          = note,
+        pitch_st         = pitch_st,
+        volume           = 0.8,
+        pan              = pan_list and pan_list[k] or 0.5,
+        no_loop          = is_noise,
+        obey_note_off    = is_noise or is_hh_open,
+        hh_open_release  = is_hh_open,
+        fx_name          = make_fx_name(note, 1, drum_type, display_tag),
+        meta             = {note=note, layer=1, drum_type=drum_type, tag=display_tag},
       })
       stats.loaded = stats.loaded + 1
     end
@@ -1100,9 +1123,14 @@ local function load_kit_flow(track)
     end
   end
 
-  -- Toms: pitched relative to center note 45 (Low Tom = normal pitch)
+  -- Toms: pitched (compressed) + panned right-to-left (low=right, high=left)
   if kit.tom then
-    load_voice(track, kit.tom[1], kit.tom[2], TOM_NOTES, TOM_PITCH_CENTER, stats)
+    local pan_list = {}
+    for i = 1, #TOM_NOTES do
+      pan_list[i] = TOM_PAN_R - (i - 1) / (#TOM_NOTES - 1) * (TOM_PAN_R - TOM_PAN_L)
+    end
+    load_voice(track, kit.tom[1], kit.tom[2], TOM_NOTES, TOM_PITCH_CENTER, stats,
+      {pitch_scale = TOM_PITCH_SCALE, pan_list = pan_list})
   end
 
   -- Fixed voices: same every kit
@@ -1135,9 +1163,9 @@ local function load_kit_flow(track)
   end
 
   reaper.MB(
-    string.format("Kit: %s\nLoaded: %d  Failed: %d\n\nTom notes pitched ±%d st from %s.\nUpper zones E5-C7 empty — assign via Add sample.",
+    string.format("Kit: %s\nLoaded: %d  Failed: %d\n\nToms: pitched -2 to +3 st from %s, panned R→L.\nHH Open: ~50ms note-off release.\nUpper zones E5-C7 empty — assign via Add sample.",
       kit.name, stats.loaded, stats.failed,
-      6, note_name(TOM_PITCH_CENTER)
+      note_name(TOM_PITCH_CENTER)
     ),
     "Kit Loaded", 0
   )
@@ -1286,13 +1314,15 @@ local function apply_random_wav(track, inst, new_type, new_tag)
   local wav, path = random_wav_from(dtype, tag)
   if not wav then return false end
   local is_noise   = (dtype == "Noise") and NOISE_LOOP_FILES[wav]
+  local is_hh_open = (dtype == "HiHat Open")
   local disp_tag   = (tag ~= "" and tag ~= "(root)") and tag or "(root)"
   configure_rs5k(track, inst.fx_idx, {
-    path          = path,
-    no_loop       = is_noise,
-    obey_note_off = is_noise,
-    fx_name       = make_fx_name(info.note, info.layer, dtype, disp_tag),
-    meta          = {note=info.note, layer=info.layer, drum_type=dtype, tag=disp_tag},
+    path            = path,
+    no_loop         = is_noise,
+    obey_note_off   = is_noise or is_hh_open,
+    hh_open_release = is_hh_open,
+    fx_name         = make_fx_name(info.note, info.layer, dtype, disp_tag),
+    meta            = {note=info.note, layer=info.layer, drum_type=dtype, tag=disp_tag},
   })
   return true, wav, path
 end
