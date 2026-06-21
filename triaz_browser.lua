@@ -1583,7 +1583,7 @@ TIPS FOR SCREEN READER USERS
   (this also stops playback).
 - The "Dump RS5k params" option in Tweak shows all parameter values in a
   message box and also in the ReaScript console output window
-  (open it via View > ReaScript console output in REAPER's menu bar).
+  (open it via the Actions list — search "ReaScript console output").
 
 TRACK SETUP
 -----------
