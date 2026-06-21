@@ -801,48 +801,157 @@ local function dump_rs5k_params(track, fx_idx)
   reaper.MB(text, "RS5k Param Dump", 0)
 end
 
--- ── Layer vol/pan edit ────────────────────────────────────────────────────────
+-- ── Shared assign dialog + preview + keep/retry/discard loop ────────────────
+-- wav_name/full_path/drum_type/tag: initial sample to show in dialog.
+-- defs (optional table): pre-populate fields {note, layer, zone_n, vol_db, pan_pct,
+--   pitch_st, zone_pitch_scale, attack, max_voices, skip_layer_check, force_new}.
+-- Returns fx_idx of kept instance, or nil if discarded/cancelled.
 
-local function edit_layer_params(track, fx_idx, layer_num)
-  local vol_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.volume)
-  local pan_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pan)
-  local vol_db  = math.floor(20 * math.log(vol_raw + 1e-9, 10) + 0.5)
-  local pan_pct = math.floor((pan_raw - 0.5) * 200 + 0.5)
+local function run_assign_dialog(track, wav_name, full_path, drum_type, tag, defs)
+  defs = defs or {}
+  local zone_hint = ""
+  for i, z in ipairs(PITCH_ZONES) do
+    zone_hint = zone_hint .. i .. "=" .. note_name(z.lo) .. "-" .. note_name(z.hi) .. " "
+  end
+  local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
 
-  local ok, result = reaper.GetUserInputs(
-    "Layer " .. layer_num .. " — Vol/Pan",
-    2,
-    "Volume dB (0 = unity),Pan % (-100 L .. 0 C .. 100 R)",
-    tostring(vol_db) .. "," .. tostring(pan_pct)
+  local captions = table.concat({
+    "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. ")",
+    "Layer (1-3; 1=new slot)",
+    "Pitch zone # (0=none; zones: " .. zone_hint .. ")",
+    "Volume dB (0=unity)",
+    "Pan % (-100=L  0=C  100=R)",
+    "Pitch shift semitones (-24 to +24)",
+    "Zone pitch scale (1.0=1st/key  neg=invert  0=no shift)",
+    "Attack (0.0=instant  1.0=max)",
+    "Max voices (0=unlimited  1-9)",
+  }, ",")
+
+  local note_default = defs.note and note_name(defs.note) or pick_note_default(gm_note)
+  local defaults_str = string.format("%s,%d,%d,%d,%d,%d,%.2f,%.2f,%d",
+    note_default,
+    defs.layer         or 1,
+    defs.zone_n        or 0,
+    defs.vol_db        or 0,
+    defs.pan_pct       or 0,
+    defs.pitch_st      or 0,
+    defs.zone_pitch_scale or 1.0,
+    defs.attack        or 0.0,
+    defs.max_voices    or 0
   )
-  if not ok then return end
+
+  local ok, result = reaper.GetUserInputs("Assign: " .. wav_name, 9, captions, defaults_str)
+  if not ok then return nil end
 
   local parts = {}
-  for p in result:gmatch("[^,]+") do parts[#parts + 1] = p end
-  local new_vol_db  = tonumber(parts[1])
-  local new_pan_pct = tonumber(parts[2])
+  for p in result:gmatch("[^,]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
+  while #parts < 9 do parts[#parts + 1] = "0" end
 
-  if new_vol_db then
-    local lin = 10 ^ (new_vol_db / 20.0)
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.volume,
-      math.min(1.0, lin))
+  local zone_n = tonumber(parts[3]) or 0
+  local zone = (zone_n >= 1 and zone_n <= #PITCH_ZONES) and PITCH_ZONES[zone_n] or nil
+
+  local target_note
+  if zone then
+    target_note = zone.mid
+  else
+    target_note = tonumber(parts[1]) or note_from_name(parts[1] or "")
+    if not target_note or target_note < 0 or target_note > 127 then
+      reaper.MB("Invalid note: " .. (parts[1] or ""), "Error", 0); return nil
+    end
   end
-  if new_pan_pct then
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pan,
-      (new_pan_pct / 200.0) + 0.5)
+
+  local layer           = math.max(1, math.min(3, tonumber(parts[2]) or 1))
+  local vol_db          = tonumber(parts[4]) or 0
+  local pan_pct         = tonumber(parts[5]) or 0
+  local pitch_st        = math.max(-24, math.min(24, tonumber(parts[6]) or 0))
+  local zone_pitch_scale = tonumber(parts[7]) or 1.0
+  local attack          = math.max(0.0, math.min(1.0, tonumber(parts[8]) or 0.0))
+  local max_voices      = math.max(0, math.min(9, math.floor(tonumber(parts[9]) or 0)))
+
+  if not defs.skip_layer_check then
+    local instances = scan_triaz_instances(track)
+    local layer_count = 0
+    for _, inst in ipairs(instances) do
+      if inst.info.note == target_note then layer_count = layer_count + 1 end
+    end
+    if layer_count >= 3 then
+      if not ask_yes_no(
+        "3 layers already on note " .. note_name(target_note) .. ". Add anyway?",
+        "Max Layers"
+      ) then return nil end
+    end
+  end
+
+  while true do
+    local assign_ok, fx_idx = assign_sample(
+      track, target_note, layer, drum_type, tag, wav_name, full_path, zone, defs.force_new
+    )
+    if not assign_ok then return nil end
+
+    local lin_vol = math.min(1.0, 10 ^ (vol_db / 20.0))
+    configure_rs5k(track, fx_idx, {
+      volume     = lin_vol,
+      pan        = (pan_pct / 200.0) + 0.5,
+      attack     = attack > 0 and attack or nil,
+      max_voices = max_voices > 0 and max_voices or nil,
+    })
+    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(pitch_st))
+
+    if zone then
+      local pnlo = (zone.lo - zone.mid) * zone_pitch_scale
+      local pnhi = (zone.hi - zone.mid) * zone_pitch_scale
+      configure_rs5k(track, fx_idx, {
+        pitch_note_lo = pnlo,
+        pitch_note_hi = pnhi,
+        mode = 0,
+      })
+    end
+
+    preview_wav(full_path)
+
+    local atk_str   = attack > 0 and string.format("  Atk:%.2f", attack) or ""
+    local voice_str = max_voices > 0 and ("  Voices:" .. max_voices) or ""
+    local choice = reaper.MB(
+      string.format(
+        "%s / %s / %s\nNote: %s%s  L%d  Vol:%ddB  Pan:%d%%  Pitch:%dst%s%s%s\n\nYes = keep\nNo = try another sample\nCancel = discard",
+        drum_type, tag, wav_name,
+        note_name(target_note),
+        zone and (" zone " .. note_name(zone.lo) .. "-" .. note_name(zone.hi)) or "",
+        layer, vol_db, pan_pct, pitch_st,
+        zone and ("  Scale:" .. zone_pitch_scale) or "",
+        atk_str, voice_str
+      ),
+      "Keep this sample?", 3
+    )
+    stop_preview()
+
+    if choice == 6 then       -- Yes: keep
+      return fx_idx
+    elseif choice == 7 then   -- No: try another sample
+      remove_rs5k(track, fx_idx)
+      local new_wav, new_path, new_type, new_tag = browse_sample()
+      if not new_wav then return nil end
+      wav_name, full_path, drum_type, tag = new_wav, new_path, new_type, new_tag
+    else                      -- Cancel: discard
+      remove_rs5k(track, fx_idx)
+      return nil
+    end
   end
 end
 
 -- ── Assign sample to RS5k ────────────────────────────────────────────────────
 
--- Find or create RS5k for note+layer, configure it
-local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, zone)
+-- Find or create RS5k for note+layer, configure it.
+-- force_new=true: always add new instance, skip existing-instance lookup.
+local function assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, zone, force_new)
   local fx_name = make_fx_name(note, layer, drum_type, tag)
 
   local fx_idx
-  for _, inst in ipairs(scan_triaz_instances(track)) do
-    if inst.info.note == note and inst.info.layer == layer then
-      fx_idx = inst.fx_idx; break
+  if not force_new then
+    for _, inst in ipairs(scan_triaz_instances(track)) do
+      if inst.info.note == note and inst.info.layer == layer then
+        fx_idx = inst.fx_idx; break
+      end
     end
   end
 
@@ -924,8 +1033,7 @@ local function tweak_mode(track, inst_n, action_n)
   if not action then
     local choices = {
       "Swap sample (re-browse)",
-      "Edit volume / pan",
-      "Edit pitch semitones",
+      "Edit parameters (vol / pan / pitch / attack / voices)",
       "Preview current sample",
       "Dump RS5k params (diagnostic)",
       "Remove this instance",
@@ -935,7 +1043,6 @@ local function tweak_mode(track, inst_n, action_n)
   end
 
   if action == 1 then
-    -- swap sample via native file dialog
     local new_wav, new_path, new_type, new_tag = browse_sample()
     if not new_wav then return end
 
@@ -950,23 +1057,33 @@ local function tweak_mode(track, inst_n, action_n)
     reaper.MB("Sample updated.", "Done", 0)
 
   elseif action == 2 then
-    edit_layer_params(track, fx_idx, info.layer)
+    local vol_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.volume)
+    local pan_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pan)
+    local pit_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st)
+    local atk_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.attack)
+    local vox_raw = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.max_voices)
 
-  elseif action == 3 then
-    local cur_p  = reaper.TrackFX_GetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st)
-    local cur_st = math.floor(param_to_pitch(cur_p) + 0.5)
-    local val = ask_string("Pitch Shift", "Semitones (-24..+24)", tostring(cur_st))
-    if val then
-      local st = tonumber(val)
-      if st and st >= -24 and st <= 24 then
-        reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st,
-          pitch_to_param(st))
-      else
-        reaper.MB("Out of range.", "Error", 0)
-      end
+    local wav_path = (ok_f and cur_file ~= "") and cur_file or ""
+    local wn = wav_path:match("[^\\/]+$") or cur_wav
+
+    local new_fx = run_assign_dialog(track, wn, wav_path, info.drum_type, info.tag, {
+      note             = info.note,
+      layer            = info.layer,
+      zone_n           = 0,
+      vol_db           = math.floor(20 * math.log(vol_raw + 1e-9, 10) + 0.5),
+      pan_pct          = math.floor((pan_raw - 0.5) * 200 + 0.5),
+      pitch_st         = math.floor(param_to_pitch(pit_raw) + 0.5),
+      zone_pitch_scale = 1.0,
+      attack           = math.floor(atk_raw * 100 + 0.5) / 100,
+      max_voices       = math.floor(vox_raw * 9 + 0.5),
+      skip_layer_check = true,
+      force_new        = true,
+    })
+    if new_fx then
+      remove_rs5k(track, fx_idx)  -- new_fx always > fx_idx (appended); safe to remove old
     end
 
-  elseif action == 4 then
+  elseif action == 3 then
     if ok_f and cur_file ~= "" then
       preview_wav(cur_file)
       reaper.MB("Playing preview. Close to stop.", "Preview", 0)
@@ -975,10 +1092,10 @@ local function tweak_mode(track, inst_n, action_n)
       reaper.MB("No sample loaded.", "Preview", 0)
     end
 
-  elseif action == 5 then
+  elseif action == 4 then
     dump_rs5k_params(track, fx_idx)
 
-  elseif action == 6 then
+  elseif action == 5 then
     if ask_yes_no("Remove this RS5k instance?", "Confirm Remove") then
       remove_rs5k(track, fx_idx)
       reaper.MB("Removed.", "Done", 0)
@@ -991,135 +1108,7 @@ end
 local function add_assignment_flow(track)
   local wav_name, full_path, drum_type, tag = browse_sample()
   if not wav_name then return end
-
-  -- 2. All assignment params in ONE dialog
-  -- Pitch zone hint
-  local zone_hint = ""
-  for i, z in ipairs(PITCH_ZONES) do
-    zone_hint = zone_hint .. i .. "=" .. note_name(z.lo) .. "-" .. note_name(z.hi) .. " "
-  end
-  local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
-
-  local captions = table.concat({
-    "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. ")",
-    "Layer (1-3; 1=new slot)",
-    "Pitch zone # (0=none; zones: " .. zone_hint .. ")",
-    "Volume dB (0=unity)",
-    "Pan % (-100=L  0=C  100=R)",
-    "Pitch shift semitones (-24 to +24)",
-    "Zone pitch scale (1.0=1st/key  neg=invert  0=no shift)",
-    "Attack (0.0=instant  1.0=max)",
-    "Max voices (0=unlimited  1-9)",
-  }, ",")
-  local defaults = pick_note_default(gm_note) .. ",1,0,0,0,0,1.0,0.0,0"
-
-  local ok, result = reaper.GetUserInputs(
-    "Assign: " .. wav_name, 9, captions, defaults
-  )
-  if not ok then return end
-
-  local parts = {}
-  for p in result:gmatch("[^,]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
-  while #parts < 9 do parts[#parts + 1] = "0" end
-
-  -- Parse pitch zone first — if zone is selected, note field is ignored entirely
-  local zone_n = tonumber(parts[3]) or 0
-  local zone = (zone_n >= 1 and zone_n <= #PITCH_ZONES) and PITCH_ZONES[zone_n] or nil
-
-  -- Parse note (skipped when zone is selected)
-  local target_note
-  if zone then
-    target_note = zone.mid
-  else
-    target_note = tonumber(parts[1]) or note_from_name(parts[1] or "")
-    if not target_note or target_note < 0 or target_note > 127 then
-      reaper.MB("Invalid note: " .. (parts[1] or ""), "Error", 0); return
-    end
-  end
-
-  -- Parse layer
-  local layer = math.max(1, math.min(3, tonumber(parts[2]) or 1))
-
-  -- Parse vol/pan/pitch/zone scale/attack/max voices
-  local vol_db           = tonumber(parts[4]) or 0
-  local pan_pct          = tonumber(parts[5]) or 0
-  local pitch_st         = math.max(-24, math.min(24, tonumber(parts[6]) or 0))
-  local zone_pitch_scale = tonumber(parts[7]) or 1.0
-  local attack           = math.max(0.0, math.min(1.0, tonumber(parts[8]) or 0.0))
-  local max_voices       = math.max(0, math.min(9, math.floor(tonumber(parts[9]) or 0)))
-
-  -- Check layer count
-  local instances = scan_triaz_instances(track)
-  local layer_count = 0
-  for _, inst in ipairs(instances) do
-    if inst.info.note == target_note then layer_count = layer_count + 1 end
-  end
-  if layer_count >= 3 then
-    if not ask_yes_no(
-      "3 layers already on note " .. note_name(target_note) .. ". Add anyway?",
-      "Max Layers"
-    ) then return end
-  end
-
-  -- Assign → preview → keep or retry
-  while true do
-    local assign_ok, fx_idx = assign_sample(
-      track, target_note, layer, drum_type, tag, wav_name, full_path, zone
-    )
-    if not assign_ok then return end
-
-    -- Apply vol/pan/pitch/attack/max voices
-    local lin_vol = math.min(1.0, 10 ^ (vol_db / 20.0))
-    configure_rs5k(track, fx_idx, {
-      volume     = lin_vol,
-      pan        = (pan_pct / 200.0) + 0.5,
-      attack     = attack > 0 and attack or nil,
-      max_voices = max_voices > 0 and max_voices or nil,
-    })
-    reaper.TrackFX_SetParamNormalized(track, fx_idx, RS5K_PARAM.pitch_st, pitch_to_param(pitch_st))
-
-    -- Apply zone pitch scale (MODE=0: freely configurable, params 5+6 scaled)
-    if zone then
-      local pnlo = (zone.lo - zone.mid) * zone_pitch_scale
-      local pnhi = (zone.hi - zone.mid) * zone_pitch_scale
-      configure_rs5k(track, fx_idx, {
-        pitch_note_lo = pnlo,
-        pitch_note_hi = pnhi,
-        mode = 0,
-      })
-    end
-
-    preview_wav(full_path)
-
-    -- Keep / try another / cancel
-    -- MB type 3 = Yes / No / Cancel
-    local atk_str   = attack > 0 and string.format("  Atk:%.2f", attack) or ""
-    local voice_str = max_voices > 0 and ("  Voices:" .. max_voices) or ""
-    local choice = reaper.MB(
-      string.format(
-        "%s / %s / %s\nNote: %s%s  L%d  Vol:%ddB  Pan:%d%%  Pitch:%dst%s%s%s\n\nYes = keep\nNo = try another sample\nCancel = discard",
-        drum_type, tag, wav_name,
-        note_name(target_note),
-        zone and (" zone " .. note_name(zone.lo) .. "-" .. note_name(zone.hi)) or "",
-        layer, vol_db, pan_pct, pitch_st,
-        zone and ("  Scale:" .. zone_pitch_scale) or "",
-        atk_str, voice_str
-      ),
-      "Keep this sample?", 3
-    )
-
-    if choice == 6 then  -- Yes: keep
-      break
-    elseif choice == 7 then  -- No: try another
-      remove_rs5k(track, fx_idx)
-      local new_wav, new_path, new_type, new_tag = browse_sample()
-      if not new_wav then stop_preview(); return end
-      wav_name, full_path, drum_type, tag = new_wav, new_path, new_type, new_tag
-    else  -- Cancel: discard
-      remove_rs5k(track, fx_idx)
-      return
-    end
-  end
+  run_assign_dialog(track, wav_name, full_path, drum_type, tag, nil)
 end
 
 -- ── Kit loader ───────────────────────────────────────────────────────────────
@@ -1600,8 +1589,7 @@ LOAD KIT
 TWEAK
   Lists all RS5k instances on the track. Pick one, then choose:
     - Swap sample      Replace with a different WAV
-    - Edit volume/pan  Adjust gain (dB) and stereo position
-    - Edit pitch       Shift pitch in semitones (-24 to +24)
+    - Edit parameters  Vol dB, pan %, pitch semitones, attack, max voices
     - Preview          Play the current sample
     - Dump RS5k params Show all internal parameter values (diagnostic)
     - Remove           Delete this RS5k instance
@@ -1782,11 +1770,10 @@ local function show_main_menu(track)
       local label = string.format("L%d %s — %s/%s", info.layer, note_name(info.note), info.drum_type, info.tag)
       open_sub(label)
       add("Swap sample",          function() tweak_mode(track, idx, 1) end)
-      add("Edit volume / pan",    function() tweak_mode(track, idx, 2) end)
-      add("Edit pitch",           function() tweak_mode(track, idx, 3) end)
-      add("Preview",              function() tweak_mode(track, idx, 4) end)
-      add("Dump RS5k params",     function() tweak_mode(track, idx, 5) end)
-      add("Remove",               function() tweak_mode(track, idx, 6) end)
+      add("Edit parameters",      function() tweak_mode(track, idx, 2) end)
+      add("Preview",              function() tweak_mode(track, idx, 3) end)
+      add("Dump RS5k params",     function() tweak_mode(track, idx, 4) end)
+      add("Remove",               function() tweak_mode(track, idx, 5) end)
       close_sub()
     end
     close_sub()
