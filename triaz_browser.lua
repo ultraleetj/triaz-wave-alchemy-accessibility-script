@@ -1539,6 +1539,126 @@ local function import_selected_items_flow(track)
   end
 end
 
+-- ── Cycle samples ────────────────────────────────────────────────────────────
+
+local function cycle_samples_flow(track)
+  local instances = scan_triaz_instances(track)
+  local voices = {}
+  for _, inst in ipairs(instances) do
+    if inst.info.drum_type ~= "Zone" then
+      voices[#voices + 1] = inst
+    end
+  end
+  if #voices == 0 then
+    reaper.MB("No samples loaded on this track.", "Cycle Samples", 0)
+    return
+  end
+
+  local labels = {}
+  for _, v in ipairs(voices) do
+    local info = v.info
+    local ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, v.fx_idx, "FILE0")
+    local cur_wav = (ok_f and cur_file ~= "") and (cur_file:match("[^\\/]+$") or cur_file) or "?"
+    local lbl = info.drum_type
+    if info.tag and info.tag ~= "" and info.tag ~= "(root)" then
+      lbl = lbl .. " / " .. info.tag
+    end
+    labels[#labels + 1] = lbl .. " — " .. cur_wav
+  end
+
+  local pick = pick_from_list("Cycle samples — pick voice", labels)
+  if not pick then return end
+
+  local inst     = voices[pick]
+  local fx_idx   = inst.fx_idx
+  local info     = inst.info
+  local drum_type = info.drum_type
+  local current_tag = (info.tag and info.tag ~= "(root)") and info.tag or ""
+
+  local ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, fx_idx, "FILE0")
+  local current_wav = (ok_f and cur_file ~= "") and (cur_file:match("[^\\/]+$") or "") or ""
+
+  local function get_wavs_for_tag(tag)
+    local path = TRIAZ_BASE .. drum_type
+    if tag ~= "" then path = path .. "\\" .. tag end
+    return list_wavs(path), path
+  end
+
+  local wavs, wav_dir = get_wavs_for_tag(current_tag)
+  local current_idx = 1
+  for i, w in ipairs(wavs) do
+    if w == current_wav then current_idx = i; break end
+  end
+
+  local function swap_to(wav_name, full_path, tag)
+    local is_noise   = (drum_type == "Noise") and NOISE_LOOP_FILES[wav_name]
+    local is_hh_open = (drum_type == "HiHat Open")
+    local disp_tag   = (tag ~= "" and tag ~= "(root)") and tag or "(root)"
+    configure_rs5k(track, fx_idx, {
+      path            = full_path,
+      no_loop         = is_noise,
+      obey_note_off   = is_noise or is_hh_open,
+      hh_open_release = is_hh_open,
+      fx_name         = make_fx_name(info.note, info.layer, drum_type, disp_tag),
+    })
+    save_meta(track, fx_idx, info.note, info.layer, drum_type, disp_tag)
+  end
+
+  local all_tags = (drum_type ~= "Noise") and list_dirs(TRIAZ_BASE .. drum_type) or {}
+
+  while true do
+    local header = drum_type
+    if current_tag ~= "" then header = header .. " / " .. current_tag end
+    header = header .. " — " .. current_wav
+
+    local items = {"< Previous", "> Next", "Pick from list"}
+    if #all_tags > 0 then items[#items + 1] = "Change tag" end
+    items[#items + 1] = "Done"
+    local done_idx = #items
+
+    local choice = pick_from_list(header, items)
+    if not choice or choice == done_idx then break end
+
+    if choice == 1 then                       -- Previous
+      if #wavs > 0 then
+        current_idx = (current_idx - 2) % #wavs + 1
+        current_wav = wavs[current_idx]
+        swap_to(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
+      end
+
+    elseif choice == 2 then                   -- Next
+      if #wavs > 0 then
+        current_idx = current_idx % #wavs + 1
+        current_wav = wavs[current_idx]
+        swap_to(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
+      end
+
+    elseif choice == 3 then                   -- Pick from list
+      if #wavs > 0 then
+        local tag_label = drum_type .. (current_tag ~= "" and " / " .. current_tag or "")
+        local n = pick_from_list(tag_label, wavs)
+        if n then
+          current_idx = n
+          current_wav = wavs[current_idx]
+          swap_to(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
+        end
+      end
+
+    elseif choice == 4 and #all_tags > 0 then -- Change tag
+      local t = pick_from_list("Tag — " .. drum_type, all_tags)
+      if t then
+        current_tag = all_tags[t]
+        wavs, wav_dir = get_wavs_for_tag(current_tag)
+        current_idx = 1
+        if #wavs > 0 then
+          current_wav = wavs[current_idx]
+          swap_to(current_wav, wav_dir .. "\\" .. current_wav, current_tag)
+        end
+      end
+    end
+  end
+end
+
 -- ── Randomize ────────────────────────────────────────────────────────────────
 
 local function random_wav_from(drum_type, tag)
@@ -1928,8 +2048,9 @@ local function show_main_menu(track)
     add("#Tweak (0 instances)")
   end
 
-  add("Randomize", function() randomize_flow(track) end)
-  add("Help",      function() show_help() end)
+  add("Cycle samples",  function() cycle_samples_flow(track) end)
+  add("Randomize",      function() randomize_flow(track) end)
+  add("Help",           function() show_help() end)
   local exit_pos   = add("Close menu")
 
   gfx.init("TRIAZ RS5k Browser", 0, 0, 0, 0, 0)
