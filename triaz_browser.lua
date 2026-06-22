@@ -165,7 +165,7 @@ local function build_cache()
   reaper.MB(
     "Scanning " .. #DRUM_TYPES .. " drum types across:\n" ..
     TRIAZ_BASE .. "\n\n" ..
-    "This takes 10–30 seconds. Click OK to start.",
+    "This can take up to a minute. Click OK to start.",
     "TRIAZ Browser — Building Cache", 0)
 
   local total_wavs, total_tags = 0, 0
