@@ -222,9 +222,15 @@ reconfigures RS5k in-place (note_lo/hi, pitch_note_lo/hi, MODE=0, metadata updat
 
 ## TRIAZ library structure
 
-Base path: `X:\samplers\TRIAZ\Samples\TRIAZ - Factory Collection\`
+Base path: `X:\samplers\TRIAZ\Samples\TRIAZ - Factory Collection\` (default).
 Hierarchy: **Drum Type → Tag → WAV** (up to 20 tags/type, up to 72 WAVs/tag)
 Total: ~9,910 WAVs across 16 Drum Types.
+
+### Library path + cache
+
+`TRIAZ_BASE` loaded from `GetExtState("TRIAZ_BROWSER", "library_path")`, falls back to the hardcoded default. Persists per-user in `reaper.ini` (set via "Change library path" menu item, `SetExtState` persist=true).
+
+Folder listings (`list_dirs`/`list_wavs`) cached in `_dir_cache`, persisted to `<resource path>\Scripts\triaz_browser_cache.lua` (a `return {...}` Lua table). Loaded via `dofile` on startup (`_cache_loaded` flag); written by `save_cache()` on exit only when `_cache_dirty`. First run (no cache) calls `build_cache()` — confirms/edits path, eager-scans all types/tags, saves immediately, ~1 min, window appears frozen. `clear_cache` ("Refresh library cache") + `change_library_path` wipe cache file and rebuild immediately.
 
 ### Drum Types (folder names)
 

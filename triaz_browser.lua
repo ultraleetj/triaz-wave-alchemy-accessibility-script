@@ -2005,12 +2005,18 @@ builds a cache of every Drum Type, Tag, and WAV. A dialog explains this
 and lets you confirm or correct the library path. The scan takes up to a
 minute and the window appears frozen while it runs — this is expected.
 
-The cache is saved to a file in your REAPER Scripts folder
-(triaz_browser_cache.lua) and survives REAPER restarts, so the scan only
-happens once. From then on the menu opens instantly.
+The cache is saved as triaz_browser_cache.lua inside the Scripts folder
+of your REAPER resource path:
+  <REAPER resource path>\Scripts\triaz_browser_cache.lua
+To find that folder, in REAPER use the menu
+  Options > Show REAPER resource path in explorer/finder...
+then open the Scripts subfolder. The cache survives REAPER restarts, so
+the scan only happens once. From then on the menu opens instantly.
 
 If you move the library, add samples, or change the path, use the main
 menu items "Refresh library cache" or "Change library path" to rebuild.
+You can also delete triaz_browser_cache.lua by hand — it rebuilds on the
+next run.
 
 NOTES AND LAYERS
 ----------------
