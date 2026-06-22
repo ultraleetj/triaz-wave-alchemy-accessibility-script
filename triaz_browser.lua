@@ -1975,56 +1975,42 @@ local function show_help()
       text = [[
 WHAT THIS SCRIPT DOES
 ---------------------
-This script lets you browse the TRIAZ sample library and load samples into
-ReaSamplOmatic5000 (RS5k) on a REAPER track. Each sample gets its own RS5k
-instance, assigned to a specific MIDI note. When you play that note on your
-keyboard or in a MIDI item, that sample plays.
+This script gives you the TRIAZ drum plugin's browse-and-build workflow
+using only native REAPER tools — no inaccessible drawn windows. The goal
+is to match, and in places improve on, what the visual TRIAZ plugin does,
+in a fully screen-reader-friendly way.
 
-Everything works through standard REAPER dialogs — no drawn windows — so it
-is fully accessible with a screen reader.
+It loads TRIAZ samples into ReaSamplOmatic5000 (RS5k) on a track. Each
+sample gets its own RS5k instance on a MIDI note; play that note and the
+sample plays.
 
-TIP: To read this help text in full, use your screen reader's object
-navigation feature to explore the dialog. This lets you move through
-individual elements of the window and have their content read aloud.
+TIP: Use your screen reader's object navigation to read this help in full.
 
 HOW THE LIBRARY IS ORGANIZED
 -----------------------------
-The TRIAZ library is organized in three levels:
-
-  Drum Type  (e.g. "Kick Electronic", "Snare Acoustic", "HiHat Closed")
-    └── Tag  (e.g. "Deep", "Punchy", "808", "Lo-Fi")
-          └── WAV files  (the actual samples)
-
-When you browse for a sample, you navigate into your library folder,
-then into a Drum Type folder, then a Tag folder, then pick a WAV.
+Three levels: Drum Type (e.g. "Kick Electronic") > Tag (e.g. "Deep",
+"808") > WAV files. Browsing walks you through them in that order.
 
 LIBRARY CACHE
 -------------
-The first time you run the script it scans the whole library folder and
-builds a cache of every Drum Type, Tag, and WAV. A dialog explains this
-and lets you confirm or correct the library path. The scan takes up to a
-minute and the window appears frozen while it runs — this is expected.
+On first run the script scans the whole library and caches every Drum
+Type, Tag, and WAV. A dialog lets you confirm or correct the library
+path. The scan takes up to a minute and the window looks frozen while it
+runs — that is expected.
 
-The cache is saved as triaz_browser_cache.lua inside the Scripts folder
-of your REAPER resource path:
+The cache is saved here and survives REAPER restarts, so the scan only
+happens once:
   <REAPER resource path>\Scripts\triaz_browser_cache.lua
-To find that folder, in REAPER use the menu
-  Options > Show REAPER resource path in explorer/finder...
-then open the Scripts subfolder. The cache survives REAPER restarts, so
-the scan only happens once. From then on the menu opens instantly.
+Find that folder via Options > Show REAPER resource path in explorer.
 
-If you move the library, add samples, or change the path, use the main
-menu items "Refresh library cache" or "Change library path" to rebuild.
-You can also delete triaz_browser_cache.lua by hand — it rebuilds on the
-next run.
+To rebuild: use "Refresh library cache" or "Change library path" in the
+menu, or just delete the cache file by hand — it rebuilds next run.
 
 NOTES AND LAYERS
 ----------------
-Every RS5k instance is assigned to a MIDI note (like C2, D#4).
-  - Note C2 = MIDI 36 = Kick in General MIDI (GM) layout.
-  - The script suggests a GM note for each drum type automatically.
-  - You can stack up to 3 samples on the same note (called layers 1, 2, 3).
-    All three will play at once when that note is triggered.
+Each RS5k instance sits on a MIDI note (C2 = MIDI 36 = Kick in General
+MIDI). The script suggests a GM note per drum type. You can stack up to 3
+samples on one note (layers 1-3) — all play together.
 ]]
     },
     {
@@ -2034,83 +2020,56 @@ MAIN MENU — WHAT EACH ITEM DOES
 ---------------------------------
 
 ADD / ASSIGN SAMPLE
-  First picks a source — if you have audio items selected on the timeline,
-  a menu offers "Browse file" or "From selected item". Otherwise goes
-  straight to the file browser.
-  Then shows a 10-field dialog: note, layer, pitch zone, volume dB, pan %,
-  pitch shift, zone pitch lo/hi (semitones), attack, max voices.
-  After assigning, previews the sample and asks: keep / try another / discard.
+  Pick a source (file browser, or "From selected item" if timeline audio
+  is selected), then a full dialog: note, layer, pitch zone, volume, pan,
+  pitch, zone pitch lo/hi, attack, voices. Previews, then keep / try
+  another / discard.
 
 QUICK ASSIGN
-  Same source picker, but only asks for note and layer. Faster for simple
-  assignments where you don't need vol/pan/pitch control.
+  Same source picker but asks only for note and layer. Fast path when you
+  don't need vol/pan/pitch.
 
 IMPORT SELECTED
-  Batch-assigns all selected timeline audio items to RS5k. Each file gets
-  its own note + layer dialog, then a preview. Only appears when items are
-  selected. To assign a single timeline item, use Add / assign sample instead
-  — it offers "From selected item" as a source option.
+  Batch-assigns all selected timeline audio items — each gets its own
+  note + layer dialog and preview. Only shows when items are selected.
 
 LOAD KIT
-  Loads a full drum kit in one shot — 15 preset kits to choose from.
-  Each kit fills notes 21–108 with kicks, snares, hats, toms, perc, and more.
-  Toms are pitched and panned across the stereo field automatically.
-  Three empty zone slots at notes 88–108 (E5–C7) are created for pitched
-  samples — assign to them via Add / assign sample (enter zone # in dialog).
-  NOTE: loading a kit creates ~56 RS5k instances and takes a few seconds.
-  (Folder scans are cached after first run, so this is fast.)
+  Loads a full drum kit in one shot — 15 presets. Fills notes 21-108 with
+  kicks, snares, hats, pitched/panned toms, perc and more, plus 3 empty
+  pitch-zone slots at notes 88-108. Takes a few seconds (~56 instances).
 
 TWEAK
-  At the top of the submenu:
-    - Assign to pitch zone (play note)
-        Play any note on your controller. The script catches it, finds the
-        matching sample, and asks which zone to move it to and what pitch
-        range to use (default -7 / +10 semitones, low to high key).
-    - Cycle samples  (see CYCLE SAMPLES section below)
-  Each loaded sample then has its own sub-menu:
-    - Swap sample      Pick a different WAV (file browser or timeline item)
-    - Edit parameters  Same 10-field dialog, pre-filled with current values.
-                       Zone samples come back in zone mode automatically.
-    - Preview          Play the sample
+  Top of the submenu:
+    - Assign to pitch zone (play note) — play a note; the script finds that
+      sample and asks which zone to move it to + pitch range (default -7/+10).
+    - Cycle samples (see below).
+  Each loaded sample also gets its own sub-menu:
+    - Swap sample      Pick a different WAV
+    - Edit parameters  Full dialog, pre-filled with current values
+    - Preview          Play it
     - Dump RS5k params Show all parameter values (message box + console)
     - Remove           Delete this instance
 
-CYCLE SAMPLES  (inside Tweak submenu)
-  Live sample browsing — swap sounds while the kit plays, no keep/discard.
-
-  Step 1 — Pick a voice from the list. Each entry shows its note name:
-    C2  Kick Electronic / Deep — wa-triaz-kick-deep-01.wav
-    D2  Snare Acoustic / Room  — wa-triaz-snare-room-02.wav
-    F2–D3  Tom / Deep — wa-triaz-tom-deep-03.wav  (all 6 toms grouped)
-    Pitch Zones (2 assigned)  (sub-picks which zone, then cycles it)
-
-  Step 2 — Cycle menu opens, header shows the current sample. Items:
-    Previous      Step back one WAV in the current tag (wraps around)
-    Next          Step forward one WAV
-    Change tag    Jump to a different tag within the same drum type
-    Done          Exit
-    (full list of WAVs in the current tag, current one marked with *)
-
-  Picking any WAV from the list swaps it immediately.
-  Toms: all 6 instances swap to the same WAV at once.
-  Zones: pick which zone first, then cycle that zone independently.
+CYCLE SAMPLES  (inside Tweak)
+  Live browsing — swap sounds while the kit plays, no keep/discard.
+  Pick a voice (toms group as one; zones ask which zone first), then use
+  Previous / Next / Change tag / Done, or pick any WAV from the listed tag
+  (current one marked *). Swaps apply instantly.
 
 RANDOMIZE
-  Four modes:
-    1. Single voice    Pick one instance; randomizes its WAV (same drum type/tag)
-    2. Entire kit      All instances get a new random WAV (same type/tag)
-    3. Entire kit + tags  Each instance also gets a random tag (same drum type)
-    4. Full random     Every instance gets a completely random type/tag/WAV
+  1. Single voice       one instance, new WAV (same type/tag)
+  2. Entire kit         every instance, new WAV (same type/tag)
+  3. Entire kit + tags  also random tag (same drum type)
+  4. Full random        random type/tag/WAV everywhere
 
 REFRESH LIBRARY CACHE
-  Wipes the cached folder listing and rescans the whole library. Use this
-  after adding or removing samples. Takes up to a minute (window appears
-  frozen while scanning — this is expected).
+  Rescans the whole library — use after adding/removing samples. Takes up
+  to a minute (window looks frozen while scanning; expected).
 
 CHANGE LIBRARY PATH
-  Set a new library folder. Pre-filled with the current path. After you
-  confirm, the old cache is cleared and the new location is scanned. The
-  path is remembered across REAPER restarts.
+  Point the script at a new library folder (pre-filled with current path).
+  Clears the old cache and scans the new location. Remembered across
+  restarts.
 ]]
     },
     {
@@ -2118,53 +2077,38 @@ CHANGE LIBRARY PATH
       text = [[
 THE 15 PRESET KITS
 ------------------
-Kits range from dark techno and punchy 808s to lo-fi tape, acoustic studio,
-drum machine, electronica/IDM, organic/world, heavy/industrial, and pop/disco.
-Explore them from the Load Kit menu — names are descriptive enough to give
-a feel before loading.
+From dark techno and punchy 808s to lo-fi tape, acoustic studio, drum
+machine, electronica/IDM, organic/world, heavy/industrial and pop/disco.
+Names in the Load Kit menu give the feel before loading.
 
-Each kit covers kick, snare, clap, hi-hats, six pitched/panned toms, crash,
-ride, and perc. A fixed set of world perc, cymbal variations, cowbell, and
-foley fills out the full GM note range. Lower extras (notes 21-34) add
-Perc Glitch, Layer, Noise, and Foley textures.
+Each kit covers kick, snare, clap, hi-hats, six pitched/panned toms,
+crash, ride and perc, with fixed world perc / cymbals / cowbell / foley
+filling out the GM range. Lower extras (notes 21-34) add Perc Glitch,
+Layer, Noise and Foley textures.
 
 UPPER PITCH ZONES (notes 88-108)
 ---------------------------------
-Three empty RS5k slots are created at:
-  Zone 1: E5-A#5  (notes 88-94,  center A#5 / MIDI 91)
-  Zone 2: B5-F6   (notes 95-101, center D#6 / MIDI 98)
-  Zone 3: F#6-C7  (notes 102-108, center A6  / MIDI 105)
+Three empty slots for pitched samples:
+  Zone 1: E5-A#5  (88-94,  center MIDI 91)
+  Zone 2: B5-F6   (95-101, center MIDI 98)
+  Zone 3: F#6-C7  (102-108, center MIDI 105)
 
-These are for pitched samples. RS5k MODE=0 (freely configurable) lets you
-set the pitch offset at the lowest and highest note of the zone independently,
-with linear interpolation across all keys in between.
+A zone sets a pitch offset at its lowest and highest key, interpolating
+across the keys between. "Pitch at low/high note" = semitone offset at
+each end; e.g. lo=-7, hi=+10 sweeps the pitch up across the zone.
 
-To assign a sample to a zone:
-  Option A — Add / assign sample: enter zone # (1-3) in the dialog. Fields
-    "Zone: pitch at low note st" and "Zone: pitch at high note st" set the
-    semitone range. Default: -7 at low note, +10 at high note.
-  Option B — Tweak > Assign to pitch zone (play note): play the note of an
-    existing instance to identify it, then pick the target zone and set
-    lo/hi pitch values directly.
-
-To edit a zone later:
-  Tweak > (instance label) > Edit parameters — shows full dialog pre-filled
-  with current zone #, pitch lo/hi, vol/pan/pitch shift etc.
-  Changing zone # here moves it to a different zone range.
-
-PITCH VALUES EXPLAINED
-  "Pitch at low note" = semitone offset applied at the lowest key of the zone.
-  "Pitch at high note" = semitone offset at the highest key.
-  RS5k interpolates linearly between them across the zone's keys.
-  Example: lo=-7, hi=+10 gives a rising pitch sweep across the zone.
-  Negative lo + positive hi = sample pitched down at bottom, up at top.
+Assign to a zone:
+  - Add / assign sample: enter zone # (1-3) and the lo/hi pitch fields.
+  - Tweak > Assign to pitch zone (play note): play an instance's note to
+    pick it, choose the zone, set lo/hi.
+Edit later via Tweak > (instance) > Edit parameters — changing zone #
+moves it to a different range.
 
 NOISE SAMPLES AND LOOPING
 --------------------------
-The 10 Noise type WAVs have embedded loop points — they would play forever.
-The script automatically disables looping for them in RS5k so they play
-once and stop. Hi-Hat Open samples use a short note-off release (~50ms)
-so they fade out cleanly when you release the key.
+The 10 Noise WAVs have embedded loop points; the script disables looping
+so they play once and stop. Hi-Hat Open uses a short note-off release
+(~50ms) to fade cleanly on key release.
 ]]
     },
     {
@@ -2172,45 +2116,40 @@ so they fade out cleanly when you release the key.
       text = [[
 TIPS FOR SCREEN READER USERS
 -----------------------------
-- All menus are native context menus. Navigate with arrow keys.
-- All data entry uses standard REAPER input dialogs (Tab between fields).
-- Preview dialogs are standard message boxes — press Enter or Space to close
-  (this also stops playback).
-- The "Dump RS5k params" option in Tweak shows all parameter values in a
-  message box and also in the ReaScript console output window
-  (open it via the Actions list — search "ReaScript console output").
+- Menus are native context menus — navigate with arrow keys.
+- Data entry uses standard REAPER input dialogs (Tab between fields).
+- Preview dialogs are message boxes — Enter or Space closes them and
+  stops playback.
+- "Dump RS5k params" also prints to the ReaScript console (open it from
+  the Actions list — search "ReaScript console output").
 
 TRACK SETUP
 -----------
-The script uses the currently selected track. Select a track before
-running it. If no track is selected — or the master track or a folder
-track is selected — the script exits silently without doing anything.
-To work on a different track, select it and re-run the script.
+Uses the currently selected track. Select one before running. If nothing
+is selected — or the master track or a folder track is — the script
+exits silently. To switch tracks, select another and re-run.
 
 OVERWRITING A KIT
 -----------------
-When you Load kit and the track already has instances:
-  - Yes     = remove all existing instances, load fresh kit
-  - No      = add kit voices alongside existing ones (stacks on top)
-  - Cancel  = abort, do nothing
+Load kit when the track already has instances:
+  Yes = replace all with a fresh kit | No = add alongside | Cancel = abort
 
 COMMON ISSUES
 -------------
 "RS5k not found"
-  ReaSamplOmatic5000 is built into REAPER. If it cannot be found, check that
-  the plugin is not disabled in REAPER preferences.
+  ReaSamplOmatic5000 ships with REAPER — check it isn't disabled in prefs.
 
 "Cannot parse DrumType/Tag from path"
-  The selected file is not inside the expected library structure
-  (Drum Type / Tag / WAV). Navigate into your library folder first.
+  File isn't inside the Drum Type / Tag / WAV structure. Browse into your
+  library folder first.
 
 "No WAVs found"
-  The tag folder may be empty or the path does not exist. Try a different
-  tag, or use "Change library path" if you moved the library.
+  Tag folder empty or path wrong. Try another tag, or "Change library
+  path" if you moved the library.
 
-Menu seems out of date / samples missing after moving the library
-  Use "Refresh library cache" to rescan, or "Change library path" if the
-  library is now in a different location.
+Menu out of date / samples missing after moving the library
+  "Refresh library cache" to rescan, or "Change library path" for a new
+  location.
 ]]
     },
   }
