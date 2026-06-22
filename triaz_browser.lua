@@ -2,7 +2,8 @@
 -- Browse TRIAZ library, assign samples to RS5k instances on a track
 -- Accessible via screen reader (native REAPER dialogs only)
 
-local TRIAZ_BASE = "X:\\samplers\\TRIAZ\\Samples\\TRIAZ - Factory Collection\\"
+local TRIAZ_BASE  = "X:\\samplers\\TRIAZ\\Samples\\TRIAZ - Factory Collection\\"
+local CACHE_PATH  = reaper.GetResourcePath() .. "\\Scripts\\triaz_browser_cache.lua"
 
 
 -- Drum types in folder order
@@ -84,7 +85,14 @@ end
 
 -- ── File system helpers ──────────────────────────────────────────────────────
 
-local _dir_cache = {}
+local _cache_dirty = false
+local _dir_cache   = {}
+
+-- Load persistent cache from disk (survives REAPER restart)
+do
+  local ok, cached = pcall(dofile, CACHE_PATH)
+  if ok and type(cached) == "table" then _dir_cache = cached end
+end
 
 local function list_dirs(path)
   local key = "d:" .. path
@@ -96,6 +104,7 @@ local function list_dirs(path)
     iter:close()
   end
   _dir_cache[key] = dirs
+  _cache_dirty = true
   return dirs
 end
 
@@ -109,7 +118,33 @@ local function list_wavs(path)
     iter:close()
   end
   _dir_cache[key] = files
+  _cache_dirty = true
   return files
+end
+
+local function save_cache()
+  if not _cache_dirty then return end
+  local f = io.open(CACHE_PATH, "w")
+  if not f then return end
+  f:write("return {\n")
+  for k, v in pairs(_dir_cache) do
+    f:write(string.format("  [%q] = {", k))
+    for i, s in ipairs(v) do
+      if i > 1 then f:write(", ") end
+      f:write(string.format("%q", s))
+    end
+    f:write("},\n")
+  end
+  f:write("}\n")
+  f:close()
+  _cache_dirty = false
+end
+
+local function clear_cache()
+  _dir_cache   = {}
+  _cache_dirty = false
+  os.remove(CACHE_PATH)
+  reaper.MB("Library cache cleared. Rescans on next use.", "Cache", 0)
 end
 
 -- Find tag folder by partial hint match, fall back to first tag
@@ -2167,9 +2202,10 @@ local function show_main_menu(track)
     add("#Tweak (0 instances)")
   end
 
-  add("Randomize",      function() randomize_flow(track) end)
-  add("Help",           function() show_help() end)
-  local exit_pos   = add("Close menu")
+  add("Randomize",             function() randomize_flow(track) end)
+  add("Refresh library cache", function() clear_cache() end)
+  add("Help",                  function() show_help() end)
+  local exit_pos = add("Close menu")
 
   gfx.init("", 0, 0, 0, 0, 0)
   gfx.x, gfx.y = 0, 0
@@ -2201,6 +2237,7 @@ local function main()
   end
 
   reaper.Undo_EndBlock("TRIAZ Browser", -1)
+  save_cache()
   stop_preview()
 end
 
