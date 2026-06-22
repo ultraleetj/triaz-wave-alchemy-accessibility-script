@@ -13,8 +13,8 @@ Right-click and choose *Save link as…* if your browser opens it in a tab.
 ## Install
 
 1. Save `triaz_browser.lua` into your REAPER **Scripts** folder.
-   Find it via *Options → Show REAPER resource path in explorer/finder…* then open the `Scripts` subfolder.
-2. In REAPER, open the **Actions** list (`?`), click **New action → Load ReaScript…**, and pick `triaz_browser.lua`.
+   Find it via *Options, Show REAPER resource path in explorer/finder…* then open the `Scripts` subfolder.
+2. In REAPER, open the **Actions** list (`?`), click **New action, Load ReaScript…**, and pick `triaz_browser.lua`.
 3. Optionally bind it to a key or toolbar button.
 
 ### Requirements
@@ -35,7 +35,7 @@ If you move the library or add samples, use **Refresh library cache** or **Chang
 
 ## What it does
 
-- Browse the TRIAZ library by Drum Type → Tag → WAV and assign samples to MIDI notes.
+- Browse the TRIAZ library by Drum Type, Tag, WAV and assign samples to MIDI notes.
 - **15 preset GM-compatible kits**, loaded in one shot (pitched/panned toms, perc, pitch zones).
 - **Quick assign** and **batch import** of selected timeline items.
 - **Tweak** any voice: swap sample, edit parameters, preview, remove.
