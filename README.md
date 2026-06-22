@@ -49,6 +49,10 @@ Full in-app help is available from the menu (**Help**).
 
 Everything runs through native REAPER message boxes, input dialogs, and context menus, all reachable with arrow keys and Tab, and announced by your screen reader. No GFX canvas UI is used for interaction.
 
+## Contributing
+
+Bug reports, feature suggestions, and pull requests are welcome. Open an issue on GitHub if something is not working or you have an idea for improvement.
+
 ## Credits
 
 Built by **ultraleetj** with [Claude Code](https://claude.com/claude-code) (Anthropic).
