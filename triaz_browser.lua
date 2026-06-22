@@ -89,9 +89,13 @@ local _cache_dirty = false
 local _dir_cache   = {}
 
 -- Load persistent cache from disk (survives REAPER restart)
+local _cache_loaded = false
 do
   local ok, cached = pcall(dofile, CACHE_PATH)
-  if ok and type(cached) == "table" then _dir_cache = cached end
+  if ok and type(cached) == "table" then
+    _dir_cache    = cached
+    _cache_loaded = true
+  end
 end
 
 local function list_dirs(path)
@@ -145,6 +149,37 @@ local function clear_cache()
   _cache_dirty = false
   os.remove(CACHE_PATH)
   reaper.MB("Library cache cleared. Rescans on next use.", "Cache", 0)
+end
+
+local function build_cache()
+  reaper.MB(
+    "First run: building library cache.\n\n" ..
+    "Scanning " .. #DRUM_TYPES .. " drum types across:\n" ..
+    TRIAZ_BASE .. "\n\n" ..
+    "This takes 10–30 seconds and only happens once.\n" ..
+    "Click OK to start.",
+    "TRIAZ Browser — First Run", 0)
+
+  local total_wavs, total_tags = 0, 0
+  for _, drum_type in ipairs(DRUM_TYPES) do
+    local tags = list_dirs(TRIAZ_BASE .. drum_type)
+    if #tags == 0 then
+      -- type stores WAVs at root (e.g. Noise)
+      local wavs = list_wavs(TRIAZ_BASE .. drum_type)
+      total_wavs = total_wavs + #wavs
+    else
+      total_tags = total_tags + #tags
+      for _, tag in ipairs(tags) do
+        local wavs = list_wavs(TRIAZ_BASE .. drum_type .. "\\" .. tag)
+        total_wavs = total_wavs + #wavs
+      end
+    end
+  end
+
+  save_cache()
+  reaper.MB(
+    string.format("Cache built: %d tags, %d WAV files indexed.", total_tags, total_wavs),
+    "TRIAZ Browser — Ready", 0)
 end
 
 -- Find tag folder by partial hint match, fall back to first tag
@@ -2224,6 +2259,8 @@ end
 
 local function main()
   reaper.Undo_BeginBlock()
+
+  if not _cache_loaded then build_cache() end
 
   local track = select_track()
   if not track then
