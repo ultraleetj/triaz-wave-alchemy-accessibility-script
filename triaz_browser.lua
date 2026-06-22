@@ -165,7 +165,9 @@ local function build_cache()
   reaper.MB(
     "Scanning " .. #DRUM_TYPES .. " drum types across:\n" ..
     TRIAZ_BASE .. "\n\n" ..
-    "This can take up to a minute. Click OK to start.",
+    "This can take up to a minute. The window will appear frozen /\n" ..
+    "unresponsive while it scans — this is expected. Wait for it to\n" ..
+    "finish. Click OK to start.",
     "TRIAZ Browser — Building Cache", 0)
 
   local total_wavs, total_tags = 0, 0
@@ -1993,9 +1995,22 @@ The TRIAZ library is organized in three levels:
     └── Tag  (e.g. "Deep", "Punchy", "808", "Lo-Fi")
           └── WAV files  (the actual samples)
 
-When you browse for a sample, you navigate into
-  X:\samplers\TRIAZ\Samples\TRIAZ - Factory Collection\
+When you browse for a sample, you navigate into your library folder,
 then into a Drum Type folder, then a Tag folder, then pick a WAV.
+
+LIBRARY CACHE
+-------------
+The first time you run the script it scans the whole library folder and
+builds a cache of every Drum Type, Tag, and WAV. A dialog explains this
+and lets you confirm or correct the library path. The scan takes up to a
+minute and the window appears frozen while it runs — this is expected.
+
+The cache is saved to a file in your REAPER Scripts folder
+(triaz_browser_cache.lua) and survives REAPER restarts, so the scan only
+happens once. From then on the menu opens instantly.
+
+If you move the library, add samples, or change the path, use the main
+menu items "Refresh library cache" or "Change library path" to rebuild.
 
 NOTES AND LAYERS
 ----------------
@@ -2036,8 +2051,8 @@ LOAD KIT
   Toms are pitched and panned across the stereo field automatically.
   Three empty zone slots at notes 88–108 (E5–C7) are created for pitched
   samples — assign to them via Add / assign sample (enter zone # in dialog).
-  NOTE: loading a kit can take up to 25 seconds — REAPER will be unresponsive
-  while it scans the sample library. This is normal; wait for it to finish.
+  NOTE: loading a kit creates ~56 RS5k instances and takes a few seconds.
+  (Folder scans are cached after first run, so this is fast.)
 
 TWEAK
   At the top of the submenu:
@@ -2073,8 +2088,6 @@ CYCLE SAMPLES  (inside Tweak submenu)
   Picking any WAV from the list swaps it immediately.
   Toms: all 6 instances swap to the same WAV at once.
   Zones: pick which zone first, then cycle that zone independently.
-  NOTE: first time opening a tag's file list may pause up to 25 seconds
-  while the library folder is scanned. Subsequent opens are instant (cached).
 
 RANDOMIZE
   Four modes:
@@ -2082,6 +2095,16 @@ RANDOMIZE
     2. Entire kit      All instances get a new random WAV (same type/tag)
     3. Entire kit + tags  Each instance also gets a random tag (same drum type)
     4. Full random     Every instance gets a completely random type/tag/WAV
+
+REFRESH LIBRARY CACHE
+  Wipes the cached folder listing and rescans the whole library. Use this
+  after adding or removing samples. Takes up to a minute (window appears
+  frozen while scanning — this is expected).
+
+CHANGE LIBRARY PATH
+  Set a new library folder. Pre-filled with the current path. After you
+  confirm, the old cache is cleared and the new location is scanned. The
+  path is remembered across REAPER restarts.
 ]]
     },
     {
@@ -2153,10 +2176,10 @@ TIPS FOR SCREEN READER USERS
 
 TRACK SETUP
 -----------
-When the script starts, it asks which track to use:
-  - Yes = use the currently selected track
-  - No  = create a new track (you name it)
-To work on a different track, close the menu and re-run the script.
+The script uses the currently selected track. Select a track before
+running it. If no track is selected — or the master track or a folder
+track is selected — the script exits silently without doing anything.
+To work on a different track, select it and re-run the script.
 
 OVERWRITING A KIT
 -----------------
@@ -2172,11 +2195,16 @@ COMMON ISSUES
   the plugin is not disabled in REAPER preferences.
 
 "Cannot parse DrumType/Tag from path"
-  The selected file is not inside the expected library structure. Navigate
-  into X:\samplers\TRIAZ\Samples\TRIAZ - Factory Collection\ first.
+  The selected file is not inside the expected library structure
+  (Drum Type / Tag / WAV). Navigate into your library folder first.
 
 "No WAVs found"
-  The tag folder may be empty or the path does not exist. Try a different tag.
+  The tag folder may be empty or the path does not exist. Try a different
+  tag, or use "Change library path" if you moved the library.
+
+Menu seems out of date / samples missing after moving the library
+  Use "Refresh library cache" to rescan, or "Change library path" if the
+  library is now in a different location.
 ]]
     },
   }
