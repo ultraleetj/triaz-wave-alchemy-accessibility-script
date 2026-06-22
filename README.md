@@ -6,7 +6,7 @@ It gives you the TRIAZ plugin's browse-and-build workflow using only native REAP
 
 ## Download
 
-**[Download `triaz_browser.lua`](https://raw.githubusercontent.com/ultraleetj/triaz-wave-alchemy-accessibility-script/main/triaz_browser.lua)**
+**[Download `triaz_browser.lua` (latest release)](https://github.com/ultraleetj/triaz-wave-alchemy-accessibility-script/releases/latest/download/triaz_browser.lua)**
 
 Right-click and choose *Save link as…* if your browser opens it in a tab.
 
