@@ -2,8 +2,10 @@
 -- Browse TRIAZ library, assign samples to RS5k instances on a track
 -- Accessible via screen reader (native REAPER dialogs only)
 
-local TRIAZ_BASE  = "X:\\samplers\\TRIAZ\\Samples\\TRIAZ - Factory Collection\\"
-local CACHE_PATH  = reaper.GetResourcePath() .. "\\Scripts\\triaz_browser_cache.lua"
+local _default_triaz_base = "X:\\samplers\\TRIAZ\\Samples\\TRIAZ - Factory Collection\\"
+local _stored_path        = reaper.GetExtState("TRIAZ_BROWSER", "library_path")
+local TRIAZ_BASE          = (_stored_path ~= "") and _stored_path or _default_triaz_base
+local CACHE_PATH          = reaper.GetResourcePath() .. "\\Scripts\\triaz_browser_cache.lua"
 
 
 -- Drum types in folder order
@@ -144,27 +146,32 @@ local function save_cache()
   _cache_dirty = false
 end
 
-local function clear_cache()
-  _dir_cache   = {}
-  _cache_dirty = false
-  os.remove(CACHE_PATH)
-  reaper.MB("Library cache cleared. Rescans on next use.", "Cache", 0)
-end
-
 local function build_cache()
+  -- Confirm or correct library path before scanning
+  local ok, fields = reaper.GetUserInputs(
+    "TRIAZ Library Path", 1,
+    "Samples folder (edit if needed),extrawidth=400", TRIAZ_BASE)
+  if not ok or fields == "" then
+    reaper.MB("Cancelled — no cache built.", "TRIAZ Browser", 0)
+    return false
+  end
+  local new_path = fields:gsub("[\\/]+$", "") .. "\\"
+  if new_path ~= TRIAZ_BASE then
+    TRIAZ_BASE = new_path
+    reaper.SetExtState("TRIAZ_BROWSER", "library_path", TRIAZ_BASE, true)
+    _dir_cache = {}
+  end
+
   reaper.MB(
-    "First run: building library cache.\n\n" ..
     "Scanning " .. #DRUM_TYPES .. " drum types across:\n" ..
     TRIAZ_BASE .. "\n\n" ..
-    "This takes 10–30 seconds and only happens once.\n" ..
-    "Click OK to start.",
-    "TRIAZ Browser — First Run", 0)
+    "This takes 10–30 seconds. Click OK to start.",
+    "TRIAZ Browser — Building Cache", 0)
 
   local total_wavs, total_tags = 0, 0
   for _, drum_type in ipairs(DRUM_TYPES) do
     local tags = list_dirs(TRIAZ_BASE .. drum_type)
     if #tags == 0 then
-      -- type stores WAVs at root (e.g. Noise)
       local wavs = list_wavs(TRIAZ_BASE .. drum_type)
       total_wavs = total_wavs + #wavs
     else
@@ -178,8 +185,31 @@ local function build_cache()
 
   save_cache()
   reaper.MB(
-    string.format("Cache built: %d tags, %d WAV files indexed.", total_tags, total_wavs),
+    string.format("Done: %d tags, %d WAV files indexed.", total_tags, total_wavs),
     "TRIAZ Browser — Ready", 0)
+  return true
+end
+
+local function clear_cache()
+  _dir_cache   = {}
+  _cache_dirty = false
+  os.remove(CACHE_PATH)
+  build_cache()
+end
+
+local function change_library_path()
+  local ok, fields = reaper.GetUserInputs(
+    "TRIAZ Library Path", 1,
+    "Samples folder,extrawidth=400", TRIAZ_BASE)
+  if not ok or fields == "" then return end
+  local new_path = fields:gsub("[\\/]+$", "") .. "\\"
+  if new_path == TRIAZ_BASE then return end
+  TRIAZ_BASE = new_path
+  reaper.SetExtState("TRIAZ_BROWSER", "library_path", TRIAZ_BASE, true)
+  _dir_cache   = {}
+  _cache_dirty = false
+  os.remove(CACHE_PATH)
+  build_cache()
 end
 
 -- Find tag folder by partial hint match, fall back to first tag
@@ -2239,6 +2269,7 @@ local function show_main_menu(track)
 
   add("Randomize",             function() randomize_flow(track) end)
   add("Refresh library cache", function() clear_cache() end)
+  add("Change library path",   function() change_library_path() end)
   add("Help",                  function() show_help() end)
   local exit_pos = add("Close menu")
 
