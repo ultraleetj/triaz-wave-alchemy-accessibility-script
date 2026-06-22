@@ -601,7 +601,7 @@ end
 -- Native context menu via gfx.showmenu — screen reader navigable with arrow keys.
 local function pick_from_list(title, items)
   if #items == 0 then reaper.MB("No items found.", title, 0); return nil end
-  gfx.init(title, 0, 0, 0, 0, 0)
+  gfx.init("", 0, 0, 0, 0, 0)
   gfx.x, gfx.y = 0, 0
   -- Disabled header item shows title as instruction; screen reader reads it before items.
   -- gfx counts it as index 1, so real items start at 2 — subtract 1 from result.
@@ -2171,7 +2171,7 @@ local function show_main_menu(track)
   add("Help",           function() show_help() end)
   local exit_pos   = add("Close menu")
 
-  gfx.init("TRIAZ RS5k Browser", 0, 0, 0, 0, 0)
+  gfx.init("", 0, 0, 0, 0, 0)
   gfx.x, gfx.y = 0, 0
   local choice = gfx.showmenu(table.concat(parts, "|"))
   gfx.quit()
