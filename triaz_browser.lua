@@ -7432,7 +7432,19 @@ end
 local function main()
   reaper.Undo_BeginBlock()
 
-  if not _cache_loaded then build_cache() end
+  if not _cache_loaded then
+    local choice = reaper.MB(
+      "No TRIAZ library cache found.\n\n" ..
+      "Do you have the Wave Alchemy TRIAZ library installed?\n\n" ..
+      "Yes  =  scan library and build cache (takes ~1 minute)\n" ..
+      "No   =  skip scan and use RS5k manager features only",
+      "TRIAZ Browser", 4)
+    if choice == 6 then
+      build_cache()
+    else
+      _cache_loaded = true  -- skip mode: don't ask again this session
+    end
+  end
 
   local track = select_track()
   if not track then

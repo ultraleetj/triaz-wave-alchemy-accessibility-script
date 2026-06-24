@@ -29,9 +29,10 @@ Right-click and choose *Save link as…* if your browser opens it in a tab.
 
 ## First run
 
-On the first launch the script scans your TRIAZ library and builds a cache of every Drum Type, Tag, and WAV. A dialog lets you confirm or correct the library path. The scan takes up to a minute and the window will appear frozen while it runs. This is expected.
+On the first launch a dialog asks whether you have the TRIAZ library installed.
 
-The cache is saved to `<REAPER resource path>\Scripts\triaz_browser_cache.lua` and survives REAPER restarts, so the scan only happens once. After that the menu opens instantly.
+- **Yes** -- the script scans your library and builds a cache of every Drum Type, Tag, and WAV. A second dialog lets you confirm or correct the library path. The scan takes up to a minute and the window will appear frozen while it runs. This is expected. The cache is saved to `<REAPER resource path>\Scripts\triaz_browser_cache.lua` and survives REAPER restarts, so the scan only happens once.
+- **No** -- the scan is skipped. All RS5k manager features work normally; TRIAZ-specific features (kit presets, Drum Type/Tag browser) are unavailable.
 
 If you move the library or add samples, use **Refresh library cache** or **Change library path** from the menu to rebuild.
 
@@ -49,7 +50,7 @@ Full in-app help is available from the menu (**Help**).
 
 ## Using without TRIAZ
 
-If you point the script at any folder of WAVs (or skip the library scan), the core RS5k management tools still work:
+Choose No at the first-run dialog and the core RS5k management tools work without any library scan:
 
 - **Add / assign sample** — file browser, assign to any MIDI note, set pitch, volume, pan, attack, voice count.
 - **Quick assign** — one-step note + file assignment.
