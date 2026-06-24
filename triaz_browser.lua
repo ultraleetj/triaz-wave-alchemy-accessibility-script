@@ -253,16 +253,24 @@ local function score_wav_kw(tag, wav_name, kw)
 end
 
 -- Pick best WAV for drum_type by scoring all tags+wavs against kw list.
--- Scans the full type across every tag — no pre-selection needed.
-local function pick_by_keywords(drum_type, kw)
+-- used_wavs (optional table path→true): skip already-chosen paths to avoid duplicates.
+-- Falls back to best overall if every WAV is already used.
+local function pick_by_keywords(drum_type, kw, used_wavs)
   local tags = list_dirs(TRIAZ_BASE .. drum_type)
-  local best_score, best_wav, best_path = -1, nil, nil
+  local best_score, best_wav, best_path = -1, nil, nil  -- best unused
+  local any_score,  any_wav,  any_path  = -1, nil, nil  -- best overall (fallback)
   local function try_dir(tag, dir)
     local wavs = list_wavs(dir)
     for _, wav in ipairs(wavs) do
-      local s = score_wav_kw(tag, wav, kw)
-      if s > best_score then
-        best_score, best_wav, best_path = s, wav, dir .. "\\" .. wav
+      local s    = score_wav_kw(tag, wav, kw)
+      local path = dir .. "\\" .. wav
+      if s > any_score then
+        any_score, any_wav, any_path = s, wav, path
+      end
+      if not (used_wavs and used_wavs[path]) then
+        if s > best_score then
+          best_score, best_wav, best_path = s, wav, path
+        end
       end
     end
   end
@@ -273,7 +281,7 @@ local function pick_by_keywords(drum_type, kw)
       try_dir(tag, TRIAZ_BASE .. drum_type .. "\\" .. tag)
     end
   end
-  return best_wav, best_path
+  return best_wav or any_wav, best_path or any_path
 end
 
 -- ── Vibe Kit definitions ─────────────────────────────────────────────────────
@@ -660,6 +668,105 @@ local VIBE_GENRES = {
         ride     ={type="Ride",             kw={"acoustic","organic","room"}},
         perc     ={type="Perc Acoustic",    kw={"bongo","djembe","hand","organic"}},
         tom      ={type="Tom",              kw={"organic","skin","acoustic","deep","wide"}},
+      },
+    },
+    { name="Latin", default_kw={"organic","acoustic","room","bongo","conga","bright"},
+      voices={
+        kick     ={type="Kick Acoustic",    kw={"punch","room","organic","bright"}},
+        kick_alt ={type="Kick Electronic",  kw={"punch","deep","organic","sub"}},
+        snare    ={type="Snare Acoustic",   kw={"bright","room","snap","organic"}},
+        snare_alt={type="Snare Acoustic",   kw={"room","organic","metallic","bright"}},
+        clap     ={type="Claps & Snaps",    kw={"organic","acoustic","bright","snap"}},
+        hh_c     ={type="Hihat Closed",     kw={"bright","acoustic","metallic","organic"}},
+        hh_pedal ={type="Hihat Closed",     kw={"bright","acoustic","metallic"}},
+        hh_o     ={type="HiHat Open",       kw={"bright","acoustic","organic","room"}},
+        crash    ={type="Crash",            kw={"bright","acoustic","room","organic"}},
+        ride     ={type="Ride",             kw={"bright","acoustic","organic"}},
+        perc     ={type="Perc Acoustic",    kw={"bongo","conga","organic","bright"}},
+        tom      ={type="Tom",              kw={"organic","room","bright","punch"}},
+      },
+    },
+    { name="African", default_kw={"djembe","hand","skin","organic","deep","heavy"},
+      voices={
+        kick     ={type="Kick Acoustic",    kw={"deep","heavy","organic","wide","room"}},
+        kick_alt ={type="Kick Acoustic",    kw={"deep","room","organic","heavy"}},
+        snare    ={type="Snare Acoustic",   kw={"organic","room","wide","heavy"}},
+        snare_alt={type="Snare Acoustic",   kw={"room","organic","live","flam"}},
+        clap     ={type="Claps & Snaps",    kw={"organic","acoustic","hand","live"}},
+        hh_c     ={type="Hihat Closed",     kw={"metallic","acoustic","organic","room"}},
+        hh_pedal ={type="Hihat Closed",     kw={"metallic","organic","acoustic"}},
+        hh_o     ={type="HiHat Open",       kw={"acoustic","heavy","organic","metallic"}},
+        crash    ={type="Crash",            kw={"organic","mallet","room","acoustic"}},
+        ride     ={type="Ride",             kw={"metallic","acoustic","organic"}},
+        perc     ={type="Perc Acoustic",    kw={"djembe","hand","organic","skin"}},
+        tom      ={type="Tom",              kw={"deep","heavy","skin","organic","wide"}},
+      },
+    },
+    { name="Tribal", default_kw={"deep","heavy","skin","organic","wood","wide"},
+      voices={
+        kick     ={type="Kick Acoustic",    kw={"deep","heavy","wide","organic","room"}},
+        kick_alt ={type="Kick Electronic",  kw={"deep","sub","heavy","organic"}},
+        snare    ={type="Snare Acoustic",   kw={"heavy","wide","organic","room"}},
+        snare_alt={type="Snare Acoustic",   kw={"deep","organic","room","metallic"}},
+        clap     ={type="Claps & Snaps",    kw={"organic","heavy","hand","acoustic"}},
+        hh_c     ={type="Hihat Closed",     kw={"metallic","heavy","organic","acoustic"}},
+        hh_pedal ={type="Hihat Closed",     kw={"metallic","heavy","organic"}},
+        hh_o     ={type="HiHat Open",       kw={"heavy","metallic","organic","acoustic"}},
+        crash    ={type="Crash",            kw={"heavy","organic","room","mallet"}},
+        ride     ={type="Ride",             kw={"metallic","heavy","organic"}},
+        perc     ={type="Perc Acoustic",    kw={"hand","skin","organic","deep"}},
+        tom      ={type="Tom",              kw={"deep","heavy","wide","skin","organic"}},
+      },
+    },
+  }},
+  -- ── Trance ───────────────────────────────────────────────────────────────────
+  { name="Trance", variants={
+    { name="Uplifting", default_kw={"punch","bright","wide","room","synth","snap"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"punch","bright","wide","sub","tight"}},
+        kick_alt ={type="Kick Electronic",  kw={"deep","punch","sub","organic"}},
+        snare    ={type="Snare Electronic", kw={"bright","room","wide","organic","layered"}},
+        snare_alt={type="Snare Acoustic",   kw={"bright","room","snap","wide"}},
+        clap     ={type="Claps & Snaps",    kw={"bright","room","organic","wide","snap"}},
+        hh_c     ={type="Hihat Closed",     kw={"bright","acoustic","synthetic","tight"}},
+        hh_pedal ={type="Hihat Closed",     kw={"bright","acoustic","synthetic"}},
+        hh_o     ={type="HiHat Open",       kw={"bright","acoustic","synthetic","wide"}},
+        crash    ={type="Crash",            kw={"bright","wide","room","organic","acoustic"}},
+        ride     ={type="Ride",             kw={"bright","acoustic","synthetic","wide"}},
+        perc     ={type="Shakers",          kw={"organic","bright","acoustic","wide"}},
+        tom      ={type="Tom",              kw={"punch","bright","wide","organic","room"}},
+      },
+    },
+    { name="Tech", default_kw={"hard","punch","tight","synth","metal","noise"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"punch","hard","tight","sub","snap"}},
+        kick_alt ={type="Kick Electronic",  kw={"hard","sub","deep","heavy"}},
+        snare    ={type="Snare Electronic", kw={"hard","punch","tight","snap","metal"}},
+        snare_alt={type="Snare Electronic", kw={"metal","tight","noise","punch"}},
+        clap     ={type="Claps & Snaps",    kw={"hard","snap","punch","tight","noise"}},
+        hh_c     ={type="Hihat Closed",     kw={"tight","metal","synthetic","noise"}},
+        hh_pedal ={type="Hihat Closed",     kw={"tight","metal","synthetic"}},
+        hh_o     ={type="HiHat Open",       kw={"metal","synthetic","tight","noise"}},
+        crash    ={type="Crash",            kw={"synth","metal","noise","hard"}},
+        ride     ={type="Ride",             kw={"synth","metal","tight","noise"}},
+        perc     ={type="Perc Electronic",  kw={"snap","metal","hard","punch"}},
+        tom      ={type="Tom",              kw={"hard","punch","tight","deep"}},
+      },
+    },
+    { name="Dark Psy", default_kw={"dark","heavy","noise","grit","layered","metal"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"dark","heavy","deep","sub","noise"}},
+        kick_alt ={type="Kick Electronic",  kw={"heavy","sub","dark","layered"}},
+        snare    ={type="Snare Electronic", kw={"dark","heavy","noise","grit","metal"}},
+        snare_alt={type="Snare Electronic", kw={"heavy","layered","noise","dark"}},
+        clap     ={type="Claps & Snaps",    kw={"heavy","dark","noise","grit"}},
+        hh_c     ={type="Hihat Closed",     kw={"metal","dark","noise","tight"}},
+        hh_pedal ={type="Hihat Closed",     kw={"metal","dark","noise"}},
+        hh_o     ={type="HiHat Open",       kw={"metal","heavy","dark","noise"}},
+        crash    ={type="Crash",            kw={"noise","dark","metal","heavy"}},
+        ride     ={type="Ride",             kw={"metal","dark","noise"}},
+        perc     ={type="Perc Electronic",  kw={"metal","dark","noise","grit"}},
+        tom      ={type="Tom",              kw={"deep","heavy","dark","hard"}},
       },
     },
   }},
@@ -1663,8 +1770,9 @@ local function load_voice(track, drum_type, tag, notes, pitch_center, stats, opt
   local resolved_tag, wav, path
 
   if kw then
-    wav, path = pick_by_keywords(drum_type, kw)
+    wav, path = pick_by_keywords(drum_type, kw, opts and opts.used_wavs)
     if not wav then stats.failed = stats.failed + 1; return end
+    if opts and opts.used_wavs then opts.used_wavs[path] = true end
     -- extract tag segment from full path
     local type_base = TRIAZ_BASE .. drum_type
     local rel = path:sub(#type_base + 2)              -- "Tag\file.wav" or "file.wav"
@@ -1711,38 +1819,27 @@ local function load_voice(track, drum_type, tag, notes, pitch_center, stats, opt
   end
 end
 
--- genre_n, variant_n: indices into VIBE_GENRES (from submenu)
-local function load_vibe_kit_flow(track, genre_n, variant_n)
+-- Inner kit loader — shared by load_vibe_kit_flow and the reload loop.
+-- used_wavs: table (path→true) for cross-voice dedup; passed into pick_by_keywords.
+local function _do_load_kit(track, genre_n, variant_n, used_wavs)
   local genre   = VIBE_GENRES[genre_n]
   local variant = genre.variants[variant_n]
-
-  local existing = scan_triaz_instances(track)
-  if #existing > 0 then
-    local choice = reaper.MB(
-      #existing .. " existing instance(s) on this track.\n\nYes = overwrite all\nNo = add alongside\nCancel = abort",
-      "Kit Load", 3
-    )
-    if choice == 2 then return end
-    if choice == 6 then
-      for i = #existing, 1, -1 do remove_rs5k(track, existing[i].fx_idx) end
-    end
-  end
-
-  local stats  = {loaded=0, failed=0}
-  local dkw    = variant.default_kw
-  local voices = variant.voices
+  local stats   = {loaded=0, failed=0}
+  local dkw     = variant.default_kw
+  local voices  = variant.voices
+  local uw      = used_wavs or {}
 
   reaper.PreventUIRefresh(1)
 
   -- Rimshot: keyword-scored with default_kw
-  load_voice(track, RIMSHOT_DEFAULT[1], "", {37}, nil, stats, {kw=dkw})
+  load_voice(track, RIMSHOT_DEFAULT[1], "", {37}, nil, stats, {kw=dkw, used_wavs=uw})
 
   -- Main voices
   local voice_order = {"kick","kick_alt","snare","snare_alt","clap","hh_c","hh_pedal","hh_o","crash","ride","perc"}
   for _, vkey in ipairs(voice_order) do
     local vdef = voices[vkey]
     if vdef then
-      load_voice(track, vdef.type, "", KIT_VOICE_NOTES[vkey], nil, stats, {kw=vdef.kw})
+      load_voice(track, vdef.type, "", KIT_VOICE_NOTES[vkey], nil, stats, {kw=vdef.kw, used_wavs=uw})
     end
   end
 
@@ -1754,17 +1851,17 @@ local function load_vibe_kit_flow(track, genre_n, variant_n)
       pan_list[i] = TOM_PAN_LOW + (i-1)/(#TOM_NOTES-1) * (TOM_PAN_HIGH - TOM_PAN_LOW)
     end
     load_voice(track, tom_def.type, "", TOM_NOTES, TOM_PITCH_CENTER, stats,
-      {kw=tom_def.kw, pitch_scale=TOM_PITCH_SCALE, pan_list=pan_list})
+      {kw=tom_def.kw, pitch_scale=TOM_PITCH_SCALE, pan_list=pan_list, used_wavs=uw})
   end
 
   -- Fixed voices: keyword-scored with default_kw
   for _, v in ipairs(KIT_FIXED_VOICES) do
-    load_voice(track, v.type, "", v.notes, nil, stats, {kw=dkw})
+    load_voice(track, v.type, "", v.notes, nil, stats, {kw=dkw, used_wavs=uw})
   end
 
   -- Lower extras: keyword-scored with default_kw
   for _, v in ipairs(KIT_LOWER_VOICES) do
-    load_voice(track, v.type, "", v.notes, nil, stats, {kw=dkw})
+    load_voice(track, v.type, "", v.notes, nil, stats, {kw=dkw, used_wavs=uw})
   end
 
   -- Upper zones: 3 empty RS5k slots
@@ -1789,7 +1886,6 @@ local function load_vibe_kit_flow(track, genre_n, variant_n)
   reaper.PreventUIRefresh(-1)
   reaper.TrackList_AdjustWindows(false)
 
-  -- Only report if there were failures
   if stats.failed > 0 then
     reaper.MB(
       string.format("%s / %s\nLoaded: %d  Failed: %d\n\nSome voices could not be loaded — check library cache.",
@@ -1797,6 +1893,15 @@ local function load_vibe_kit_flow(track, genre_n, variant_n)
       "Kit: partial load", 0
     )
   end
+  return stats
+end
+
+-- genre_n, variant_n: indices into VIBE_GENRES (from submenu)
+local function load_vibe_kit_flow(track, genre_n, variant_n)
+  -- Always overwrite — REAPER undo handles recovery
+  local existing = scan_triaz_instances(track)
+  for i = #existing, 1, -1 do remove_rs5k(track, existing[i].fx_idx) end
+  _do_load_kit(track, genre_n, variant_n, {})
 end
 
 -- ── Quick assign ─────────────────────────────────────────────────────────────
@@ -2378,12 +2483,13 @@ IMPORT SELECTED
 LOAD KIT
   Loads a full drum kit in one shot. Navigate: genre submenu → variant.
   Genres: Techno, House, Drum & Bass, Electronica, Lo-Fi, Pop & Disco,
-  Rap, Acoustic, World. Each genre has 2-5 character variants (Dark,
-  Punchy, 808 Sub, etc.). WAVs are chosen by scoring the full library
-  against keyword lists — so every voice gets the best matching sound.
+  Rap, Acoustic, World, Trance. Each genre has 2-5 character variants
+  (Dark, Punchy, 808 Sub, Uplifting, etc.). WAVs are chosen by scoring
+  the full library against keyword lists — duplicate files are avoided so
+  kick and kick_alt always get distinct sounds. Always overwrites existing
+  instances (use REAPER Undo to reverse). Returns to main menu after load.
   Fills notes 21-108 (kicks/snares/hats/toms/perc/extras) plus 3 empty
-  pitch-zone slots at 88-108. Returns to menu immediately; only shows a
-  dialog if some voices failed to load.
+  pitch-zone slots at 88-108.
 
 TWEAK
   Top of the submenu:
@@ -2436,7 +2542,8 @@ Lo-Fi (Tape / Boom Bap)
 Pop & Disco (Pop / Disco)
 Rap (Trap 808 / Boom Bap)
 Acoustic (Studio / Live)
-World (Organic)
+World (Organic / Latin / African / Tribal)
+Trance (Uplifting / Tech / Dark Psy)
 
 Each voice (kick, snare, hats, etc.) has a keyword list. The full TRIAZ
 library is scored across every tag — highest match wins. Fixed voices and
@@ -2488,8 +2595,8 @@ exits silently. To switch tracks, select another and re-run.
 
 OVERWRITING A KIT
 -----------------
-Load kit when the track already has instances:
-  Yes = replace all with a fresh kit | No = add alongside | Cancel = abort
+Loading a kit always clears existing instances first. Use REAPER Undo
+(Ctrl+Z) immediately after if you want to go back.
 
 COMMON ISSUES
 -------------
