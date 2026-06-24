@@ -4,6 +4,8 @@ A fully screen-reader-accessible REAPER script for browsing the **Wave Alchemy T
 
 It gives you the TRIAZ plugin's browse-and-build workflow using only native REAPER dialogs, with no inaccessible drawn windows. The goal is to match, and in places improve on, what the visual TRIAZ plugin does, in a way that works cleanly with a screen reader (tested with OSARA + NVDA).
 
+**Don't own TRIAZ?** The script also works as a general-purpose RS5k manager. You can browse any folder of WAVs, assign samples to MIDI notes, swap, tweak, preview, and randomize voices -- everything except the TRIAZ-specific kit presets and cache. See [Using without TRIAZ](#using-without-triaz) below.
+
 ## Download
 
 **[Download `triaz_browser.lua` (latest release)](https://github.com/ultraleetj/triaz-wave-alchemy-accessibility-script/releases/latest/download/triaz_browser.lua)**
@@ -23,7 +25,7 @@ Right-click and choose *Save link as…* if your browser opens it in a tab.
 - **SWS/S&M extension** for sample preview (`CF_Preview`)
 - **js_ReaScriptAPI** for the native file browser dialog
 - **OSARA** screen reader accessibility layer (recommended)
-- The **Wave Alchemy TRIAZ** sample library installed locally
+- The **Wave Alchemy TRIAZ** sample library installed locally *(optional — see below)*
 
 ## First run
 
@@ -35,15 +37,28 @@ If you move the library or add samples, use **Refresh library cache** or **Chang
 
 ## What it does
 
-- Browse the TRIAZ library by Drum Type, Tag, WAV and assign samples to MIDI notes.
-- **15 preset GM-compatible kits**, loaded in one shot (pitched/panned toms, perc, pitch zones).
+- Browse the TRIAZ library by Drum Type, Tag, and WAV, then assign samples to MIDI notes on any RS5k instrument.
+- **320 genre-based vibe kits** across 16 genres and 20 variants each (Techno, House, DnB, Electronica, Lo-Fi, Rap, Acoustic, World, Funk, Jazz, Reggae and Dub, Breakbeat, Afrobeat, Footwork, Trance, Pop and Disco) -- loaded in one shot with pitched/panned toms, perc, and pitch zones.
 - **Quick assign** and **batch import** of selected timeline items.
 - **Tweak** any voice: swap sample, edit parameters, preview, remove.
 - **Cycle samples** live while the kit plays.
-- **Randomize** a single voice or the whole kit.
+- **Randomize** a single voice or the whole kit (5 modes including keyword-similarity matching).
 - Three upper **pitch zones** for melodic/pitched samples.
 
 Full in-app help is available from the menu (**Help**).
+
+## Using without TRIAZ
+
+If you point the script at any folder of WAVs (or skip the library scan), the core RS5k management tools still work:
+
+- **Add / assign sample** — file browser, assign to any MIDI note, set pitch, volume, pan, attack, voice count.
+- **Quick assign** — one-step note + file assignment.
+- **Import selected** — drag audio items from the timeline directly into RS5k slots.
+- **Tweak** — swap, edit parameters, preview, remove any RS5k instance on the track.
+- **Randomize** — randomize samples across instances.
+- **Pitch zones** — configure RS5k pitch scaling zones for melodic use.
+
+The TRIAZ-specific features (genre kits, Drum Type/Tag browser, library cache) require the TRIAZ library. Everything else works with any WAV collection.
 
 ## Accessibility
 
