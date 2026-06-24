@@ -944,6 +944,7 @@ local RS5K_NAMES = {
   "Samplomatic5000",
 }
 local _rs5k_working_name = nil
+local _loaded_kit        = nil  -- {genre_n, variant_n} of last loaded kit
 
 local function add_rs5k(track)
   if _rs5k_working_name then
@@ -1902,6 +1903,7 @@ local function load_vibe_kit_flow(track, genre_n, variant_n)
   local existing = scan_triaz_instances(track)
   for i = #existing, 1, -1 do remove_rs5k(track, existing[i].fx_idx) end
   _do_load_kit(track, genre_n, variant_n, {})
+  _loaded_kit = {genre_n, variant_n}
 end
 
 -- ── Quick assign ─────────────────────────────────────────────────────────────
@@ -2680,7 +2682,9 @@ local function show_main_menu(track)
     open_sub(genre.name)
     for vi, variant in ipairs(genre.variants) do
       local g, v = gi, vi
-      add(variant.name, function() load_vibe_kit_flow(track, g, v) end)
+      local is_loaded = _loaded_kit and _loaded_kit[1] == gi and _loaded_kit[2] == vi
+      local label = is_loaded and ("!" .. variant.name) or variant.name
+      add(label, function() load_vibe_kit_flow(track, g, v) end)
     end
     close_sub()
   end
