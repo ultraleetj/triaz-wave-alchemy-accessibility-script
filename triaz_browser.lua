@@ -238,166 +238,434 @@ local function pick_kit_wav(drum_type, tag)
   return wav, path .. "\\" .. wav
 end
 
--- ── Kit definitions ──────────────────────────────────────────────────────────
--- Mirrored from generate_kits.py. Each kit: voice_key = {drum_type, tag}.
--- Rimshot (note 37) fixed across all kits via RIMSHOT_DEFAULT.
--- Tom voices (notes 41,43,45,47,48,50) are pitched relative to TOM_PITCH_CENTER.
+-- ── Keyword-based WAV selection ──────────────────────────────────────────────
 
-local KITS = {
-  { name="01 Techno Dark",
-    kick={"Kick Electronic","Deep"},       kick_alt={"Kick Electronic","Sub"},
-    snare={"Snare Electronic","Noise"},    snare_alt={"Snare Electronic","Synthetic"},
-    clap={"Claps & Snaps","Noise"},
-    hh_c={"Hihat Closed","Metallic"},      hh_pedal={"Hihat Closed","Acoustic"},
-    hh_o={"HiHat Open","Metallic"},
-    tom={"Tom","Deep"},
-    crash={"Crash","Noise"},               ride={"Ride","Synthetic"},
-    perc={"Perc Electronic","Metallic"},
-  },
-  { name="02 Techno Punchy",
-    kick={"Kick Electronic","Punchy"},     kick_alt={"Kick Electronic","Tight"},
-    snare={"Snare Electronic","Tight"},    snare_alt={"Snare Electronic","Bright"},
-    clap={"Claps & Snaps","Snap"},
-    hh_c={"Hihat Closed","Synthetic"},     hh_pedal={"Hihat Closed","Metallic"},
-    hh_o={"HiHat Open","Synthetic"},
-    tom={"Tom","Punchy"},
-    crash={"Crash","Synthetic"},           ride={"Ride","Synthetic"},
-    perc={"Perc Electronic","Blips & Pops"},
-  },
-  { name="03 Techno 808",
-    kick={"Kick Electronic","808"},        kick_alt={"Kick Electronic","Sub"},
-    snare={"Snare Electronic","808"},      snare_alt={"Snare Electronic","Drum Machine"},
-    clap={"Claps & Snaps","808"},
-    hh_c={"Hihat Closed","808"},           hh_pedal={"Hihat Closed","Synthetic"},
-    hh_o={"HiHat Open","808"},
-    tom={"Tom","808"},
-    crash={"Crash","Synthetic"},           ride={"Ride","Synthetic"},
-    perc={"Perc Electronic","Snap"},
-  },
-  { name="04 House Classic",
-    kick={"Kick Electronic","Deep"},       kick_alt={"Kick Electronic","Room"},
-    snare={"Snare Electronic","Room"},     snare_alt={"Snare Acoustic","Bright"},
-    clap={"Claps & Snaps","Room"},
-    hh_c={"Hihat Closed","Acoustic"},      hh_pedal={"Hihat Closed","Room"},
-    hh_o={"HiHat Open","Acoustic"},
-    tom={"Tom","Room"},
-    crash={"Crash","Acoustic"},            ride={"Ride","Acoustic"},
-    perc={"Shakers","Acoustic"},
-  },
-  { name="05 House Electronic",
-    kick={"Kick Electronic","Organic"},    kick_alt={"Kick Electronic","Layered"},
-    snare={"Snare Electronic","Organic"},  snare_alt={"Snare Electronic","Layered"},
-    clap={"Claps & Snaps","Layered"},
-    hh_c={"Hihat Closed","Synthetic"},     hh_pedal={"Hihat Closed","Acoustic"},
-    hh_o={"HiHat Open","Synthetic"},
-    tom={"Tom","Organic"},
-    crash={"Crash","Creative"},            ride={"Ride","Creative"},
-    perc={"Perc Electronic","Hand Drum"},
-  },
-  { name="06 Lo-Fi Acoustic",
-    kick={"Kick Acoustic","Deep"},         kick_alt={"Kick Acoustic","Room"},
-    snare={"Snare Acoustic","Room"},       snare_alt={"Snare Acoustic","Lo-Fi"},
-    clap={"Claps & Snaps","Acoustic"},
-    hh_c={"Hihat Closed","Lo-Fi"},         hh_pedal={"Hihat Closed","Acoustic"},
-    hh_o={"HiHat Open","Lo-Fi"},
-    tom={"Tom","Acoustic"},
-    crash={"Crash","Room"},                ride={"Ride","Room"},
-    perc={"Perc Acoustic","Small Perc"},
-  },
-  { name="07 Lo-Fi Tape",
-    kick={"Kick Electronic","Tape & Vinyl"}, kick_alt={"Kick Acoustic","Deep"},
-    snare={"Snare Acoustic","Tape & Vinyl"}, snare_alt={"Snare Electronic","Lo-Fi"},
-    clap={"Claps & Snaps","Tape & Vinyl"},
-    hh_c={"Hihat Closed","Tape & Vinyl"},  hh_pedal={"Hihat Closed","Lo-Fi"},
-    hh_o={"HiHat Open","Tape & Vinyl"},
-    tom={"Tom","Tape & Vinyl"},
-    crash={"Crash","Organic"},             ride={"Ride","Acoustic"},
-    perc={"Foley","Sticks & Clicks"},
-  },
-  { name="08 Rap/Trap",
-    kick={"Kick Electronic","808"},        kick_alt={"Kick Electronic","Sub"},
-    snare={"Snare Electronic","Heavy"},    snare_alt={"Snare Electronic","808"},
-    clap={"Claps & Snaps","Heavy"},
-    hh_c={"Hihat Closed","Noise"},         hh_pedal={"Hihat Closed","Synthetic"},
-    hh_o={"HiHat Open","Noise"},
-    tom={"Tom","Heavy"},
-    crash={"Crash","Synthetic"},           ride={"Ride","Synthetic"},
-    perc={"Perc Electronic","Snap"},
-  },
-  { name="09 Acoustic Studio",
-    kick={"Kick Acoustic","Punchy"},       kick_alt={"Kick Acoustic","Bright"},
-    snare={"Snare Acoustic","Bright"},     snare_alt={"Snare Acoustic","Room"},
-    clap={"Claps & Snaps","Acoustic"},
-    hh_c={"Hihat Closed","Acoustic"},      hh_pedal={"Hihat Closed","Room"},
-    hh_o={"HiHat Open","Acoustic"},
-    tom={"Tom","Acoustic"},
-    crash={"Crash","Acoustic"},            ride={"Ride","Acoustic"},
-    perc={"Perc Acoustic","Hand Drum"},
-  },
-  { name="10 Acoustic Room",
-    kick={"Kick Acoustic","Room"},         kick_alt={"Kick Acoustic","Heavy"},
-    snare={"Snare Acoustic","Room"},       snare_alt={"Snare Acoustic","Organic"},
-    clap={"Claps & Snaps","Room"},
-    hh_c={"Hihat Closed","Room"},          hh_pedal={"Hihat Closed","Acoustic"},
-    hh_o={"HiHat Open","Room"},
-    tom={"Tom","Room"},
-    crash={"Crash","Room"},                ride={"Ride","Room"},
-    perc={"Perc Acoustic","Room"},
-  },
-  { name="11 Drum Machine",
-    kick={"Kick Electronic","Drum Machine"},     kick_alt={"Kick Electronic","Synthetic"},
-    snare={"Snare Electronic","Drum Machine"},   snare_alt={"Snare Electronic","808"},
-    clap={"Claps & Snaps","Drum Machine"},
-    hh_c={"Hihat Closed","Drum Machine"},        hh_pedal={"Hihat Closed","Synthetic"},
-    hh_o={"HiHat Open","Drum Machine"},
-    tom={"Tom","Drum Machine"},
-    crash={"Crash","Drum Machine"},              ride={"Ride","Drum Machine"},
-    perc={"Perc Electronic","Drum Machine"},
-  },
-  { name="12 Electronica/IDM",
-    kick={"Kick Electronic","Layered"},    kick_alt={"Kick Electronic","Creative"},
-    snare={"Snare Electronic","Layered"},  snare_alt={"Snare Electronic","Creative"},
-    clap={"Claps & Snaps","Glitch"},
-    hh_c={"Hihat Closed","Noise"},         hh_pedal={"Hihat Closed","808"},
-    hh_o={"HiHat Open","Heavy"},
-    tom={"Tom","Creative"},
-    crash={"Crash","Creative"},            ride={"Ride","Creative"},
-    perc={"Perc Glitch","Blips & Pops"},
-  },
-  { name="13 Organic/World",
-    kick={"Kick Acoustic","Heavy"},        kick_alt={"Kick Acoustic","Deep"},
-    snare={"Snare Acoustic","Organic"},    snare_alt={"Snare Acoustic","Metallic"},
-    clap={"Claps & Snaps","Organic"},
-    hh_c={"Hihat Closed","Metallic"},      hh_pedal={"Hihat Closed","Acoustic"},
-    hh_o={"HiHat Open","Acoustic"},
-    tom={"Tom","Organic"},
-    crash={"Crash","Organic"},             ride={"Ride","Acoustic"},
-    perc={"Perc Acoustic","Bongo"},
-  },
-  { name="14 Heavy/Industrial",
-    kick={"Kick Electronic","Heavy"},      kick_alt={"Kick Electronic","Sub"},
-    snare={"Snare Electronic","Heavy"},    snare_alt={"Snare Electronic","Noise"},
-    clap={"Claps & Snaps","Heavy"},
-    hh_c={"Hihat Closed","Metallic"},      hh_pedal={"Hihat Closed","Noise"},
-    hh_o={"HiHat Open","Heavy"},
-    tom={"Tom","Heavy"},
-    crash={"Crash","Noise"},               ride={"Ride","Bright"},
-    perc={"Perc Electronic","Metallic"},
-  },
-  { name="15 Pop/Disco",
-    kick={"Kick Electronic","Punchy"},     kick_alt={"Kick Acoustic","Bright"},
-    snare={"Snare Acoustic","Bright"},     snare_alt={"Snare Electronic","Tight"},
-    clap={"Claps & Snaps","Bright"},
-    hh_c={"Hihat Closed","Bright"},        hh_pedal={"Hihat Closed","Acoustic"},
-    hh_o={"HiHat Open","Bright"},
-    tom={"Tom","Punchy"},
-    crash={"Crash","Bright"},              ride={"Ride","Bright"},
-    perc={"Shakers","Acoustic"},
-  },
+-- Score tag+wav against keyword list. Tag match = 2pts, filename match = 1pt.
+local function score_wav_kw(tag, wav_name, kw)
+  local score = 0
+  local tl = tag:lower()
+  local wl = wav_name:lower()
+  for _, w in ipairs(kw) do
+    if tl:find(w, 1, true) then score = score + 2 end
+    if wl:find(w, 1, true) then score = score + 1 end
+  end
+  return score
+end
+
+-- Pick best WAV for drum_type by scoring all tags+wavs against kw list.
+-- Scans the full type across every tag — no pre-selection needed.
+local function pick_by_keywords(drum_type, kw)
+  local tags = list_dirs(TRIAZ_BASE .. drum_type)
+  local best_score, best_wav, best_path = -1, nil, nil
+  local function try_dir(tag, dir)
+    local wavs = list_wavs(dir)
+    for _, wav in ipairs(wavs) do
+      local s = score_wav_kw(tag, wav, kw)
+      if s > best_score then
+        best_score, best_wav, best_path = s, wav, dir .. "\\" .. wav
+      end
+    end
+  end
+  if #tags == 0 then
+    try_dir("", TRIAZ_BASE .. drum_type)
+  else
+    for _, tag in ipairs(tags) do
+      try_dir(tag, TRIAZ_BASE .. drum_type .. "\\" .. tag)
+    end
+  end
+  return best_wav, best_path
+end
+
+-- ── Vibe Kit definitions ─────────────────────────────────────────────────────
+-- VIBE_GENRES[i] = {name, variants={...}}
+-- variant: {name, default_kw, voices={key={type,kw},...}}
+--   voice keys: kick kick_alt snare snare_alt clap hh_c hh_pedal hh_o
+--               crash ride perc tom
+--   default_kw: used for rimshot, fixed voices, lower extras, upper zones
+
+local VIBE_GENRES = {
+  -- ── Techno ────────────────────────────────────────────────────────────────
+  { name="Techno", variants={
+    { name="Dark", default_kw={"dark","metal","hard","grit","noise"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"deep","dark","sub","metal","hard"}},
+        kick_alt ={type="Kick Electronic",  kw={"sub","noise","dirty","grit"}},
+        snare    ={type="Snare Electronic", kw={"dark","noise","metal","hard","grit"}},
+        snare_alt={type="Snare Electronic", kw={"noise","dirty","heavy","industrial"}},
+        clap     ={type="Claps & Snaps",    kw={"noise","heavy","dark","hard"}},
+        hh_c     ={type="Hihat Closed",     kw={"metal","tight","dark","noise"}},
+        hh_pedal ={type="Hihat Closed",     kw={"metal","noise","tight"}},
+        hh_o     ={type="HiHat Open",       kw={"metal","heavy","dark","noise"}},
+        crash    ={type="Crash",            kw={"noise","dark","metal","trash"}},
+        ride     ={type="Ride",             kw={"metal","dark","noise"}},
+        perc     ={type="Perc Electronic",  kw={"metal","dark","noise","industrial"}},
+        tom      ={type="Tom",              kw={"deep","dark","heavy","hard"}},
+      },
+    },
+    { name="Punchy", default_kw={"punch","snap","tight","hard"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"punch","snap","tight","knock","hard"}},
+        kick_alt ={type="Kick Electronic",  kw={"tight","sub","punch","snap"}},
+        snare    ={type="Snare Electronic", kw={"punch","snap","tight","smack","hard"}},
+        snare_alt={type="Snare Electronic", kw={"tight","crack","bright","snap"}},
+        clap     ={type="Claps & Snaps",    kw={"snap","punch","tight","hard"}},
+        hh_c     ={type="Hihat Closed",     kw={"tight","snap","synth","metal"}},
+        hh_pedal ={type="Hihat Closed",     kw={"tight","snap","metal"}},
+        hh_o     ={type="HiHat Open",       kw={"synth","bright","tight","snap"}},
+        crash    ={type="Crash",            kw={"synth","bright","snap","punch"}},
+        ride     ={type="Ride",             kw={"synth","bright","tight"}},
+        perc     ={type="Perc Electronic",  kw={"snap","blip","punch","tight"}},
+        tom      ={type="Tom",              kw={"punch","tight","snap","hard"}},
+      },
+    },
+    { name="Classic 909", default_kw={"909","classic","drum","machine"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"909","drum","classic","machine"}},
+        kick_alt ={type="Kick Electronic",  kw={"909","sub","deep","drum"}},
+        snare    ={type="Snare Electronic", kw={"909","drum","classic","machine"}},
+        snare_alt={type="Snare Electronic", kw={"909","bright","snap","drum"}},
+        clap     ={type="Claps & Snaps",    kw={"909","drum","classic","machine"}},
+        hh_c     ={type="Hihat Closed",     kw={"909","drum","classic","machine"}},
+        hh_pedal ={type="Hihat Closed",     kw={"909","drum","machine"}},
+        hh_o     ={type="HiHat Open",       kw={"909","drum","classic","machine"}},
+        crash    ={type="Crash",            kw={"909","drum","machine","synth"}},
+        ride     ={type="Ride",             kw={"909","drum","machine"}},
+        perc     ={type="Perc Electronic",  kw={"drum","machine","classic","909"}},
+        tom      ={type="Tom",              kw={"909","drum","classic","machine"}},
+      },
+    },
+    { name="808 Sub", default_kw={"808","sub","bass","deep"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"808","sub","bass","deep","boom"}},
+        kick_alt ={type="Kick Electronic",  kw={"808","sub","bass"}},
+        snare    ={type="Snare Electronic", kw={"808","drum","machine","heavy"}},
+        snare_alt={type="Snare Electronic", kw={"808","snap","heavy","drum"}},
+        clap     ={type="Claps & Snaps",    kw={"808","snap","synth","drum"}},
+        hh_c     ={type="Hihat Closed",     kw={"808","drum","synth","machine"}},
+        hh_pedal ={type="Hihat Closed",     kw={"808","synth","drum"}},
+        hh_o     ={type="HiHat Open",       kw={"808","synth","drum"}},
+        crash    ={type="Crash",            kw={"synth","808","drum","machine"}},
+        ride     ={type="Ride",             kw={"synth","808","drum"}},
+        perc     ={type="Perc Electronic",  kw={"808","snap","blip","drum"}},
+        tom      ={type="Tom",              kw={"808","deep","sub","heavy"}},
+      },
+    },
+    { name="Industrial", default_kw={"crunch","crush","stomp","noise","hard","metal"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"hard","stomp","crunch","heavy","punch"}},
+        kick_alt ={type="Kick Electronic",  kw={"noise","crush","dirty","grit"}},
+        snare    ={type="Snare Electronic", kw={"metal","hard","crunch","noise","grit"}},
+        snare_alt={type="Snare Electronic", kw={"crush","noise","industrial","heavy"}},
+        clap     ={type="Claps & Snaps",    kw={"noise","heavy","hard","crush"}},
+        hh_c     ={type="Hihat Closed",     kw={"metal","noise","hard","tight"}},
+        hh_pedal ={type="Hihat Closed",     kw={"metal","noise","hard"}},
+        hh_o     ={type="HiHat Open",       kw={"metal","noise","heavy","hard"}},
+        crash    ={type="Crash",            kw={"noise","metal","trash","crush","dark"}},
+        ride     ={type="Ride",             kw={"metal","noise","dark"}},
+        perc     ={type="Perc Electronic",  kw={"metal","noise","industrial","hard"}},
+        tom      ={type="Tom",              kw={"heavy","hard","stomp","deep"}},
+      },
+    },
+  }},
+  -- ── House ─────────────────────────────────────────────────────────────────
+  { name="House", variants={
+    { name="Classic", default_kw={"room","live","acoustic","bright","organic"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"deep","room","organic","punch"}},
+        kick_alt ={type="Kick Electronic",  kw={"room","organic","layered"}},
+        snare    ={type="Snare Electronic", kw={"room","organic","bright","layered"}},
+        snare_alt={type="Snare Acoustic",   kw={"bright","room","snap","organic"}},
+        clap     ={type="Claps & Snaps",    kw={"room","acoustic","bright","organic"}},
+        hh_c     ={type="Hihat Closed",     kw={"acoustic","room","bright","organic"}},
+        hh_pedal ={type="Hihat Closed",     kw={"acoustic","room","bright"}},
+        hh_o     ={type="HiHat Open",       kw={"acoustic","room","bright","organic"}},
+        crash    ={type="Crash",            kw={"acoustic","room","bright","organic"}},
+        ride     ={type="Ride",             kw={"acoustic","room","bright"}},
+        perc     ={type="Shakers",          kw={"acoustic","organic","room"}},
+        tom      ={type="Tom",              kw={"room","organic","acoustic","punch"}},
+      },
+    },
+    { name="Electronic", default_kw={"synth","organic","layered","bright"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"organic","layered","punch","bright"}},
+        kick_alt ={type="Kick Electronic",  kw={"organic","synthetic","layered"}},
+        snare    ={type="Snare Electronic", kw={"organic","layered","bright","room"}},
+        snare_alt={type="Snare Electronic", kw={"organic","bright","snap","layered"}},
+        clap     ={type="Claps & Snaps",    kw={"layered","bright","organic","snap"}},
+        hh_c     ={type="Hihat Closed",     kw={"synth","bright","organic","layered"}},
+        hh_pedal ={type="Hihat Closed",     kw={"synth","bright","organic"}},
+        hh_o     ={type="HiHat Open",       kw={"synth","bright","organic","layered"}},
+        crash    ={type="Crash",            kw={"creative","bright","synth","organic"}},
+        ride     ={type="Ride",             kw={"creative","synth","bright"}},
+        perc     ={type="Perc Electronic",  kw={"snap","blip","organic","bright"}},
+        tom      ={type="Tom",              kw={"organic","punch","bright","layered"}},
+      },
+    },
+    { name="Deep", default_kw={"lush","deep","soft","warm","room"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"deep","sub","soft","lush","organic"}},
+        kick_alt ={type="Kick Electronic",  kw={"deep","organic","room","layered"}},
+        snare    ={type="Snare Electronic", kw={"room","soft","lush","organic","layered"}},
+        snare_alt={type="Snare Acoustic",   kw={"room","soft","organic","bright"}},
+        clap     ={type="Claps & Snaps",    kw={"soft","room","lush","organic"}},
+        hh_c     ={type="Hihat Closed",     kw={"acoustic","soft","room","bright"}},
+        hh_pedal ={type="Hihat Closed",     kw={"soft","acoustic","room"}},
+        hh_o     ={type="HiHat Open",       kw={"acoustic","soft","lush","room"}},
+        crash    ={type="Crash",            kw={"soft","room","lush","organic"}},
+        ride     ={type="Ride",             kw={"acoustic","room","soft","bright"}},
+        perc     ={type="Shakers",          kw={"organic","soft","acoustic","lush"}},
+        tom      ={type="Tom",              kw={"deep","soft","room","organic"}},
+      },
+    },
+    { name="Disco", default_kw={"disco","gold","bright","lush","pop"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"punch","disco","bright","deep"}},
+        kick_alt ={type="Kick Acoustic",    kw={"bright","punch","room","pop"}},
+        snare    ={type="Snare Acoustic",   kw={"bright","pop","disco","room"}},
+        snare_alt={type="Snare Acoustic",   kw={"bright","room","organic","snap"}},
+        clap     ={type="Claps & Snaps",    kw={"bright","organic","acoustic","room"}},
+        hh_c     ={type="Hihat Closed",     kw={"bright","acoustic","gold","disco"}},
+        hh_pedal ={type="Hihat Closed",     kw={"bright","acoustic","gold"}},
+        hh_o     ={type="HiHat Open",       kw={"bright","acoustic","gold","disco"}},
+        crash    ={type="Crash",            kw={"bright","acoustic","gold","room"}},
+        ride     ={type="Ride",             kw={"bright","acoustic","gold","disco"}},
+        perc     ={type="Shakers",          kw={"organic","acoustic","bright","lush"}},
+        tom      ={type="Tom",              kw={"bright","punch","disco","room"}},
+      },
+    },
+  }},
+  -- ── Drum & Bass ───────────────────────────────────────────────────────────
+  { name="Drum & Bass", variants={
+    { name="Dark", default_kw={"hard","dark","metal","grit","punch"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"hard","dark","punch","sub","tight"}},
+        kick_alt ={type="Kick Electronic",  kw={"sub","deep","hard","heavy"}},
+        snare    ={type="Snare Electronic", kw={"hard","punch","snap","tight","metal"}},
+        snare_alt={type="Snare Electronic", kw={"bright","snap","hard","tight"}},
+        clap     ={type="Claps & Snaps",    kw={"snap","hard","punch","tight"}},
+        hh_c     ={type="Hihat Closed",     kw={"tight","metal","noise","hard"}},
+        hh_pedal ={type="Hihat Closed",     kw={"tight","metal","hard"}},
+        hh_o     ={type="HiHat Open",       kw={"metal","heavy","noise","hard"}},
+        crash    ={type="Crash",            kw={"noise","metal","dark","trash"}},
+        ride     ={type="Ride",             kw={"metal","dark","noise"}},
+        perc     ={type="Perc Electronic",  kw={"metal","snap","punch","hard"}},
+        tom      ={type="Tom",              kw={"hard","deep","punch","heavy"}},
+      },
+    },
+    { name="Liquid", default_kw={"bright","room","organic","soft","punch"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"punch","bright","organic","tight"}},
+        kick_alt ={type="Kick Acoustic",    kw={"room","bright","punch","organic"}},
+        snare    ={type="Snare Acoustic",   kw={"bright","room","snap","organic"}},
+        snare_alt={type="Snare Electronic", kw={"bright","snap","organic","punch"}},
+        clap     ={type="Claps & Snaps",    kw={"bright","acoustic","snap","organic"}},
+        hh_c     ={type="Hihat Closed",     kw={"bright","acoustic","room","organic"}},
+        hh_pedal ={type="Hihat Closed",     kw={"bright","acoustic","room"}},
+        hh_o     ={type="HiHat Open",       kw={"bright","acoustic","room","organic"}},
+        crash    ={type="Crash",            kw={"bright","room","organic","acoustic"}},
+        ride     ={type="Ride",             kw={"bright","acoustic","room"}},
+        perc     ={type="Shakers",          kw={"organic","bright","acoustic","lush"}},
+        tom      ={type="Tom",              kw={"bright","punch","room","organic"}},
+      },
+    },
+  }},
+  -- ── Electronica ───────────────────────────────────────────────────────────
+  { name="Electronica", variants={
+    { name="IDM", default_kw={"glitch","noise","creative","crunch","grit"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"layered","creative","noise","crunch","grit"}},
+        kick_alt ={type="Kick Electronic",  kw={"noise","dirty","sub","crunch"}},
+        snare    ={type="Snare Electronic", kw={"layered","creative","noise","crunch"}},
+        snare_alt={type="Snare Electronic", kw={"glitch","crunch","noise","grit"}},
+        clap     ={type="Claps & Snaps",    kw={"glitch","noise","creative","heavy"}},
+        hh_c     ={type="Hihat Closed",     kw={"noise","synthetic","tight","grit"}},
+        hh_pedal ={type="Hihat Closed",     kw={"noise","synthetic","tight"}},
+        hh_o     ={type="HiHat Open",       kw={"noise","heavy","synthetic","grit"}},
+        crash    ={type="Crash",            kw={"creative","noise","mallet","trash"}},
+        ride     ={type="Ride",             kw={"creative","noise","synthetic"}},
+        perc     ={type="Perc Glitch",      kw={"blip","creative","glitch","noise"}},
+        tom      ={type="Tom",              kw={"creative","heavy","organic","noise"}},
+      },
+    },
+    { name="Ambient", default_kw={"soft","lush","room","organic","vintage"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"soft","organic","room","lush"}},
+        kick_alt ={type="Kick Acoustic",    kw={"room","soft","organic","vintage"}},
+        snare    ={type="Snare Electronic", kw={"soft","organic","room","lush","layered"}},
+        snare_alt={type="Snare Acoustic",   kw={"room","soft","organic","vintage"}},
+        clap     ={type="Claps & Snaps",    kw={"soft","organic","room","acoustic"}},
+        hh_c     ={type="Hihat Closed",     kw={"soft","acoustic","room","organic"}},
+        hh_pedal ={type="Hihat Closed",     kw={"soft","acoustic","room"}},
+        hh_o     ={type="HiHat Open",       kw={"soft","acoustic","room","lush"}},
+        crash    ={type="Crash",            kw={"mallet","soft","organic","room"}},
+        ride     ={type="Ride",             kw={"soft","organic","room","acoustic"}},
+        perc     ={type="Shakers",          kw={"organic","soft","acoustic","lush"}},
+        tom      ={type="Tom",              kw={"soft","room","organic","deep"}},
+      },
+    },
+  }},
+  -- ── Lo-Fi ─────────────────────────────────────────────────────────────────
+  { name="Lo-Fi", variants={
+    { name="Tape", default_kw={"tape","vinyl","lofi","old","tube","amp"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"tape","vinyl","lofi","old","amp"}},
+        kick_alt ={type="Kick Acoustic",    kw={"room","tape","lofi","vintage"}},
+        snare    ={type="Snare Acoustic",   kw={"tape","vinyl","lofi","room","old"}},
+        snare_alt={type="Snare Electronic", kw={"lofi","tape","dirty","vintage"}},
+        clap     ={type="Claps & Snaps",    kw={"tape","vinyl","lofi","old"}},
+        hh_c     ={type="Hihat Closed",     kw={"tape","vinyl","lofi","old"}},
+        hh_pedal ={type="Hihat Closed",     kw={"tape","lofi","old"}},
+        hh_o     ={type="HiHat Open",       kw={"tape","vinyl","lofi","old"}},
+        crash    ={type="Crash",            kw={"tape","organic","room","lofi"}},
+        ride     ={type="Ride",             kw={"acoustic","tape","room","lofi"}},
+        perc     ={type="Foley",            kw={"stick","click","organic","old"}},
+        tom      ={type="Tom",              kw={"tape","room","organic","lofi"}},
+      },
+    },
+    { name="Boom Bap", default_kw={"room","vintage","old","punch","grit"},
+      voices={
+        kick     ={type="Kick Acoustic",    kw={"punch","room","vintage","hard","deep"}},
+        kick_alt ={type="Kick Electronic",  kw={"sub","deep","vintage","old"}},
+        snare    ={type="Snare Acoustic",   kw={"room","bright","snap","punch","pop"}},
+        snare_alt={type="Snare Acoustic",   kw={"room","vintage","pop","organic"}},
+        clap     ={type="Claps & Snaps",    kw={"snap","bright","old","room","acoustic"}},
+        hh_c     ={type="Hihat Closed",     kw={"acoustic","vintage","room","old"}},
+        hh_pedal ={type="Hihat Closed",     kw={"acoustic","vintage","old"}},
+        hh_o     ={type="HiHat Open",       kw={"acoustic","vintage","room","old"}},
+        crash    ={type="Crash",            kw={"acoustic","room","vintage","organic"}},
+        ride     ={type="Ride",             kw={"acoustic","vintage","room","old"}},
+        perc     ={type="Shakers",          kw={"organic","acoustic","vintage"}},
+        tom      ={type="Tom",              kw={"room","punch","vintage","organic"}},
+      },
+    },
+  }},
+  -- ── Pop & Disco ───────────────────────────────────────────────────────────
+  { name="Pop & Disco", variants={
+    { name="Pop", default_kw={"bright","pop","clean","wide","snap"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"punch","bright","pop","snap","tight"}},
+        kick_alt ={type="Kick Acoustic",    kw={"bright","punch","room","pop"}},
+        snare    ={type="Snare Acoustic",   kw={"bright","pop","room","wide","snap"}},
+        snare_alt={type="Snare Electronic", kw={"bright","snap","tight","pop"}},
+        clap     ={type="Claps & Snaps",    kw={"bright","pop","snap","organic"}},
+        hh_c     ={type="Hihat Closed",     kw={"bright","acoustic","pop","room"}},
+        hh_pedal ={type="Hihat Closed",     kw={"bright","acoustic","pop"}},
+        hh_o     ={type="HiHat Open",       kw={"bright","acoustic","pop","room"}},
+        crash    ={type="Crash",            kw={"bright","acoustic","pop","room"}},
+        ride     ={type="Ride",             kw={"bright","acoustic","pop"}},
+        perc     ={type="Shakers",          kw={"organic","bright","acoustic","pop"}},
+        tom      ={type="Tom",              kw={"bright","punch","wide","pop"}},
+      },
+    },
+    { name="Disco", default_kw={"disco","gold","bright","lush","acoustic"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"punch","disco","deep","bright"}},
+        kick_alt ={type="Kick Acoustic",    kw={"bright","punch","room","disco"}},
+        snare    ={type="Snare Acoustic",   kw={"bright","room","disco","snap","pop"}},
+        snare_alt={type="Snare Acoustic",   kw={"bright","room","organic","wide"}},
+        clap     ={type="Claps & Snaps",    kw={"bright","organic","acoustic","room"}},
+        hh_c     ={type="Hihat Closed",     kw={"bright","acoustic","gold","disco"}},
+        hh_pedal ={type="Hihat Closed",     kw={"bright","acoustic","gold","disco"}},
+        hh_o     ={type="HiHat Open",       kw={"bright","acoustic","gold","disco"}},
+        crash    ={type="Crash",            kw={"bright","acoustic","gold","room"}},
+        ride     ={type="Ride",             kw={"bright","acoustic","gold","disco"}},
+        perc     ={type="Shakers",          kw={"organic","acoustic","bright","lush"}},
+        tom      ={type="Tom",              kw={"bright","punch","disco","room"}},
+      },
+    },
+  }},
+  -- ── Rap ───────────────────────────────────────────────────────────────────
+  { name="Rap", variants={
+    { name="Trap / 808", default_kw={"808","heavy","snap","hard","sub"},
+      voices={
+        kick     ={type="Kick Electronic",  kw={"808","sub","bass","deep","boom"}},
+        kick_alt ={type="Kick Electronic",  kw={"808","sub","bass","heavy"}},
+        snare    ={type="Snare Electronic", kw={"heavy","808","punch","hard","snap"}},
+        snare_alt={type="Snare Electronic", kw={"808","snap","heavy","drum"}},
+        clap     ={type="Claps & Snaps",    kw={"heavy","snap","808","hard"}},
+        hh_c     ={type="Hihat Closed",     kw={"noise","synthetic","808","tight"}},
+        hh_pedal ={type="Hihat Closed",     kw={"noise","808","synthetic","tight"}},
+        hh_o     ={type="HiHat Open",       kw={"noise","heavy","808","synthetic"}},
+        crash    ={type="Crash",            kw={"synth","808","noise","heavy"}},
+        ride     ={type="Ride",             kw={"synth","808","noise"}},
+        perc     ={type="Perc Electronic",  kw={"snap","blip","808","hard"}},
+        tom      ={type="Tom",              kw={"808","heavy","sub","deep"}},
+      },
+    },
+    { name="Boom Bap", default_kw={"room","punch","vintage","snap","organic"},
+      voices={
+        kick     ={type="Kick Acoustic",    kw={"punch","room","hard","deep","vintage"}},
+        kick_alt ={type="Kick Electronic",  kw={"sub","punch","deep","vintage"}},
+        snare    ={type="Snare Acoustic",   kw={"room","bright","snap","punch","pop"}},
+        snare_alt={type="Snare Electronic", kw={"snap","bright","punch","hard"}},
+        clap     ={type="Claps & Snaps",    kw={"snap","bright","organic","room"}},
+        hh_c     ={type="Hihat Closed",     kw={"acoustic","vintage","room","old"}},
+        hh_pedal ={type="Hihat Closed",     kw={"acoustic","vintage","old"}},
+        hh_o     ={type="HiHat Open",       kw={"acoustic","vintage","room","old"}},
+        crash    ={type="Crash",            kw={"acoustic","room","organic","vintage"}},
+        ride     ={type="Ride",             kw={"acoustic","room","vintage"}},
+        perc     ={type="Shakers",          kw={"organic","acoustic","vintage"}},
+        tom      ={type="Tom",              kw={"room","punch","vintage","organic"}},
+      },
+    },
+  }},
+  -- ── Acoustic ──────────────────────────────────────────────────────────────
+  { name="Acoustic", variants={
+    { name="Studio", default_kw={"bright","room","acoustic","live","organic"},
+      voices={
+        kick     ={type="Kick Acoustic",    kw={"punch","bright","room","organic"}},
+        kick_alt ={type="Kick Acoustic",    kw={"room","deep","acoustic","heavy"}},
+        snare    ={type="Snare Acoustic",   kw={"bright","room","snap","organic"}},
+        snare_alt={type="Snare Acoustic",   kw={"room","organic","bright","wide"}},
+        clap     ={type="Claps & Snaps",    kw={"acoustic","room","organic","bright"}},
+        hh_c     ={type="Hihat Closed",     kw={"acoustic","bright","room","organic"}},
+        hh_pedal ={type="Hihat Closed",     kw={"acoustic","room","bright"}},
+        hh_o     ={type="HiHat Open",       kw={"acoustic","bright","room","organic"}},
+        crash    ={type="Crash",            kw={"acoustic","bright","room","organic"}},
+        ride     ={type="Ride",             kw={"acoustic","bright","room","organic"}},
+        perc     ={type="Perc Acoustic",    kw={"hand","drum","organic","acoustic"}},
+        tom      ={type="Tom",              kw={"acoustic","bright","room","organic"}},
+      },
+    },
+    { name="Live", default_kw={"wide","live","room","organic","flam"},
+      voices={
+        kick     ={type="Kick Acoustic",    kw={"wide","room","live","heavy","organic"}},
+        kick_alt ={type="Kick Acoustic",    kw={"room","organic","live","deep"}},
+        snare    ={type="Snare Acoustic",   kw={"room","wide","organic","flam","live"}},
+        snare_alt={type="Snare Acoustic",   kw={"room","live","organic","bright"}},
+        clap     ={type="Claps & Snaps",    kw={"organic","room","acoustic","live"}},
+        hh_c     ={type="Hihat Closed",     kw={"acoustic","room","live","organic"}},
+        hh_pedal ={type="Hihat Closed",     kw={"acoustic","live","room"}},
+        hh_o     ={type="HiHat Open",       kw={"acoustic","room","live","organic"}},
+        crash    ={type="Crash",            kw={"acoustic","room","organic","live"}},
+        ride     ={type="Ride",             kw={"acoustic","room","live","organic"}},
+        perc     ={type="Perc Acoustic",    kw={"organic","hand","djembe","live"}},
+        tom      ={type="Tom",              kw={"wide","room","organic","skin","live"}},
+      },
+    },
+  }},
+  -- ── World ─────────────────────────────────────────────────────────────────
+  { name="World", variants={
+    { name="Organic", default_kw={"organic","djembe","skin","hand","wood","acoustic"},
+      voices={
+        kick     ={type="Kick Acoustic",    kw={"organic","deep","room","heavy","wide"}},
+        kick_alt ={type="Kick Acoustic",    kw={"room","organic","acoustic","vintage"}},
+        snare    ={type="Snare Acoustic",   kw={"organic","room","metallic","wide"}},
+        snare_alt={type="Snare Acoustic",   kw={"organic","room","live","flam"}},
+        clap     ={type="Claps & Snaps",    kw={"organic","acoustic","room","live"}},
+        hh_c     ={type="Hihat Closed",     kw={"metallic","acoustic","organic","room"}},
+        hh_pedal ={type="Hihat Closed",     kw={"acoustic","metallic","organic"}},
+        hh_o     ={type="HiHat Open",       kw={"acoustic","organic","room","live"}},
+        crash    ={type="Crash",            kw={"organic","acoustic","room","mallet"}},
+        ride     ={type="Ride",             kw={"acoustic","organic","room"}},
+        perc     ={type="Perc Acoustic",    kw={"bongo","djembe","hand","organic"}},
+        tom      ={type="Tom",              kw={"organic","skin","acoustic","deep","wide"}},
+      },
+    },
+  }},
 }
 
--- Voice key → GM notes (order matters for loading)
-local KIT_VOICE_ORDER = {"kick","kick_alt","snare","snare_alt","clap","hh_c","hh_pedal","hh_o","crash","ride","perc"}
+-- Voice key → GM notes (shared by all vibe kits)
 local KIT_VOICE_NOTES = {
   kick={36}, kick_alt={35},
   snare={38}, snare_alt={40},
@@ -1391,16 +1659,26 @@ end
 -- pitch_scale compresses the semitone spread (1.0 = full, 0.5 = half).
 -- pan_list[i] overrides pan for the i-th note in the notes array.
 local function load_voice(track, drum_type, tag, notes, pitch_center, stats, opts)
-  local resolved_tag
-  if tag == "" then
-    resolved_tag = ""
-  else
-    resolved_tag = find_tag(drum_type, tag)
-    if not resolved_tag then stats.failed = stats.failed + 1; return end
-  end
+  local kw = opts and opts.kw
+  local resolved_tag, wav, path
 
-  local wav, path = pick_kit_wav(drum_type, resolved_tag)
-  if not wav then stats.failed = stats.failed + 1; return end
+  if kw then
+    wav, path = pick_by_keywords(drum_type, kw)
+    if not wav then stats.failed = stats.failed + 1; return end
+    -- extract tag segment from full path
+    local type_base = TRIAZ_BASE .. drum_type
+    local rel = path:sub(#type_base + 2)              -- "Tag\file.wav" or "file.wav"
+    resolved_tag = rel:match("^([^\\/]+)[/\\]") or ""
+  else
+    if tag == "" then
+      resolved_tag = ""
+    else
+      resolved_tag = find_tag(drum_type, tag)
+      if not resolved_tag then stats.failed = stats.failed + 1; return end
+    end
+    wav, path = pick_kit_wav(drum_type, resolved_tag)
+    if not wav then stats.failed = stats.failed + 1; return end
+  end
 
   local is_noise    = (drum_type == "Noise") and NOISE_LOOP_FILES[wav]
   local is_hh_open  = (drum_type == "HiHat Open")
@@ -1433,16 +1711,10 @@ local function load_voice(track, drum_type, tag, notes, pitch_center, stats, opt
   end
 end
 
--- kit_n: pre-selected kit index (from submenu); nil = show picker dialog
-local function load_kit_flow(track, kit_n)
-  local n = kit_n
-  if not n then
-    local kit_names = {}
-    for _, k in ipairs(KITS) do kit_names[#kit_names + 1] = k.name end
-    n = pick_from_list("Load Kit", kit_names)
-    if not n then return end
-  end
-  local kit = KITS[n]
+-- genre_n, variant_n: indices into VIBE_GENRES (from submenu)
+local function load_vibe_kit_flow(track, genre_n, variant_n)
+  local genre   = VIBE_GENRES[genre_n]
+  local variant = genre.variants[variant_n]
 
   local existing = scan_triaz_instances(track)
   if #existing > 0 then
@@ -1456,42 +1728,46 @@ local function load_kit_flow(track, kit_n)
     end
   end
 
-  local stats = {loaded=0, failed=0}
-  local t_start = reaper.time_precise()
+  local stats  = {loaded=0, failed=0}
+  local dkw    = variant.default_kw
+  local voices = variant.voices
 
   reaper.PreventUIRefresh(1)
 
-  -- Rimshot: fixed across all kits
-  load_voice(track, RIMSHOT_DEFAULT[1], RIMSHOT_DEFAULT[2], {37}, nil, stats)
+  -- Rimshot: keyword-scored with default_kw
+  load_voice(track, RIMSHOT_DEFAULT[1], "", {37}, nil, stats, {kw=dkw})
 
-  -- Kit-specific voices
-  for _, vkey in ipairs(KIT_VOICE_ORDER) do
-    if kit[vkey] then
-      load_voice(track, kit[vkey][1], kit[vkey][2], KIT_VOICE_NOTES[vkey], nil, stats)
+  -- Main voices
+  local voice_order = {"kick","kick_alt","snare","snare_alt","clap","hh_c","hh_pedal","hh_o","crash","ride","perc"}
+  for _, vkey in ipairs(voice_order) do
+    local vdef = voices[vkey]
+    if vdef then
+      load_voice(track, vdef.type, "", KIT_VOICE_NOTES[vkey], nil, stats, {kw=vdef.kw})
     end
   end
 
-  -- Toms: pitched (compressed) + panned right-to-left (low=right, high=left)
-  if kit.tom then
+  -- Toms: pitched + panned, keyword-scored
+  local tom_def = voices.tom
+  if tom_def then
     local pan_list = {}
     for i = 1, #TOM_NOTES do
-      pan_list[i] = TOM_PAN_LOW + (i - 1) / (#TOM_NOTES - 1) * (TOM_PAN_HIGH - TOM_PAN_LOW)
+      pan_list[i] = TOM_PAN_LOW + (i-1)/(#TOM_NOTES-1) * (TOM_PAN_HIGH - TOM_PAN_LOW)
     end
-    load_voice(track, kit.tom[1], kit.tom[2], TOM_NOTES, TOM_PITCH_CENTER, stats,
-      {pitch_scale = TOM_PITCH_SCALE, pan_list = pan_list})
+    load_voice(track, tom_def.type, "", TOM_NOTES, TOM_PITCH_CENTER, stats,
+      {kw=tom_def.kw, pitch_scale=TOM_PITCH_SCALE, pan_list=pan_list})
   end
 
-  -- Fixed voices: same every kit
+  -- Fixed voices: keyword-scored with default_kw
   for _, v in ipairs(KIT_FIXED_VOICES) do
-    load_voice(track, v.type, v.tag, v.notes, nil, stats)
+    load_voice(track, v.type, "", v.notes, nil, stats, {kw=dkw})
   end
 
-  -- Lower extras: notes 21-34 (Perc Glitch / Layer / Noise / Foley)
+  -- Lower extras: keyword-scored with default_kw
   for _, v in ipairs(KIT_LOWER_VOICES) do
-    load_voice(track, v.type, v.tag, v.notes, nil, stats)
+    load_voice(track, v.type, "", v.notes, nil, stats, {kw=dkw})
   end
 
-  -- Upper zones: 3 empty RS5k slots (E5-C7) for user-assigned pitched samples
+  -- Upper zones: 3 empty RS5k slots
   for _, z in ipairs(KIT_UPPER_ZONES) do
     local fx_idx = add_rs5k(track)
     if fx_idx >= 0 then
@@ -1513,14 +1789,14 @@ local function load_kit_flow(track, kit_n)
   reaper.PreventUIRefresh(-1)
   reaper.TrackList_AdjustWindows(false)
 
-  local elapsed = reaper.time_precise() - t_start
-  reaper.MB(
-    string.format("Kit: %s\nLoaded: %d  Failed: %d  (%.1fs)\n\nToms: pitched -2 to +3 st from %s, panned R→L.\nHH Open: ~50ms note-off release.\nUpper zones E5-C7 empty — assign via Add sample.",
-      kit.name, stats.loaded, stats.failed, elapsed,
-      note_name(TOM_PITCH_CENTER)
-    ),
-    "Kit Loaded", 0
-  )
+  -- Only report if there were failures
+  if stats.failed > 0 then
+    reaper.MB(
+      string.format("%s / %s\nLoaded: %d  Failed: %d\n\nSome voices could not be loaded — check library cache.",
+        genre.name, variant.name, stats.loaded, stats.failed),
+      "Kit: partial load", 0
+    )
+  end
 end
 
 -- ── Quick assign ─────────────────────────────────────────────────────────────
@@ -1860,6 +2136,17 @@ end
 
 -- ── Randomize ────────────────────────────────────────────────────────────────
 
+-- Extract character keywords from a TRIAZ WAV filename for "similar" scoring.
+-- "wa-triaz-kick_elec-808-afro_crack.wav" → {"kick","elec","808","afro","crack"}
+local function extract_kw_from_wav(wav_name)
+  local inner = wav_name:lower():gsub("%.wav$",""):gsub("^wa%-triaz%-","")
+  local words = {}
+  for w in inner:gmatch("[a-z0-9]+") do
+    if #w >= 3 then words[#words + 1] = w end
+  end
+  return words
+end
+
 local function random_wav_from(drum_type, tag)
   local path = (tag and tag ~= "" and tag ~= "(root)")
     and (TRIAZ_BASE .. drum_type .. "\\" .. tag)
@@ -1912,6 +2199,7 @@ local function randomize_flow(track)
     "2  Entire kit  — same type/tag, new random WAV each voice",
     "3  Entire kit  — random tag within same drum type",
     "4  Full random — random type/tag/WAV every voice",
+    "5  Similar     — stay close to current character (all voices)",
   }
   local mode = pick_from_list("Randomize", modes)
   if not mode then return end
@@ -1963,6 +2251,60 @@ local function randomize_flow(track)
       else failed = failed + 1 end
     end
     reaper.MB(string.format("Full random: %d voices. Failed: %d.", changed, failed), "Done", 0)
+
+  elseif mode == 5 then
+    -- Similar: score all WAVs in same drum type by keywords from current filename.
+    -- Pick highest-scoring WAV that isn't the current one.
+    local changed, failed = 0, 0
+    for _, inst in ipairs(voices) do
+      local info = inst.info
+      local ok_f, cur_file = reaper.TrackFX_GetNamedConfigParm(track, inst.fx_idx, "FILE0")
+      local cur_wav = (ok_f and cur_file ~= "") and (cur_file:match("[^\\/]+$") or "") or ""
+      local kw = extract_kw_from_wav(cur_wav)
+      if #kw == 0 then
+        -- no keywords — fall back to random same type/tag
+        if apply_random_wav(track, inst, nil, nil) then changed = changed + 1
+        else failed = failed + 1 end
+      else
+        -- score all WAVs across type, skip current
+        local tags = list_dirs(TRIAZ_BASE .. info.drum_type)
+        local best_score, best_wav, best_path = -1, nil, nil
+        local function try_sim(tag, dir)
+          for _, wav in ipairs(list_wavs(dir)) do
+            if wav ~= cur_wav then
+              local s = score_wav_kw(tag, wav, kw)
+              if s > best_score then
+                best_score, best_wav, best_path = s, wav, dir .. "\\" .. wav
+              end
+            end
+          end
+        end
+        if #tags == 0 then
+          try_sim("", TRIAZ_BASE .. info.drum_type)
+        else
+          for _, tag in ipairs(tags) do
+            try_sim(tag, TRIAZ_BASE .. info.drum_type .. "\\" .. tag)
+          end
+        end
+        if best_wav then
+          local is_noise   = (info.drum_type == "Noise") and NOISE_LOOP_FILES[best_wav]
+          local is_hh_open = (info.drum_type == "HiHat Open")
+          local tag_from_path = best_path:match("[^\\/]+[/\\]([^\\/]+)[/\\][^\\/]+$") or info.tag
+          configure_rs5k(track, inst.fx_idx, {
+            path            = best_path,
+            no_loop         = is_noise,
+            obey_note_off   = is_noise or is_hh_open,
+            hh_open_release = is_hh_open,
+            fx_name         = make_fx_name(info.note, info.layer, info.drum_type, tag_from_path),
+            meta            = {note=info.note, layer=info.layer, drum_type=info.drum_type, tag=tag_from_path},
+          })
+          changed = changed + 1
+        else
+          failed = failed + 1
+        end
+      end
+    end
+    reaper.MB(string.format("Similar: %d voices updated. Failed: %d.", changed, failed), "Done", 0)
   end
 end
 
@@ -2034,9 +2376,14 @@ IMPORT SELECTED
   note + layer dialog and preview. Only shows when items are selected.
 
 LOAD KIT
-  Loads a full drum kit in one shot — 15 presets. Fills notes 21-108 with
-  kicks, snares, hats, pitched/panned toms, perc and more, plus 3 empty
-  pitch-zone slots at notes 88-108. Takes a few seconds (~56 instances).
+  Loads a full drum kit in one shot. Navigate: genre submenu → variant.
+  Genres: Techno, House, Drum & Bass, Electronica, Lo-Fi, Pop & Disco,
+  Rap, Acoustic, World. Each genre has 2-5 character variants (Dark,
+  Punchy, 808 Sub, etc.). WAVs are chosen by scoring the full library
+  against keyword lists — so every voice gets the best matching sound.
+  Fills notes 21-108 (kicks/snares/hats/toms/perc/extras) plus 3 empty
+  pitch-zone slots at 88-108. Returns to menu immediately; only shows a
+  dialog if some voices failed to load.
 
 TWEAK
   Top of the submenu:
@@ -2061,6 +2408,9 @@ RANDOMIZE
   2. Entire kit         every instance, new WAV (same type/tag)
   3. Entire kit + tags  also random tag (same drum type)
   4. Full random        random type/tag/WAV everywhere
+  5. Similar            stays close to current character — scores all WAVs
+                        in same drum type by keywords from current filename,
+                        picks highest-scoring different sound per voice
 
 REFRESH LIBRARY CACHE
   Rescans the whole library — use after adding/removing samples. Takes up
@@ -2075,16 +2425,23 @@ CHANGE LIBRARY PATH
     {
       title = "TRIAZ RS5k Browser — Help (3/4): Kits and Zones",
       text = [[
-THE 15 PRESET KITS
-------------------
-From dark techno and punchy 808s to lo-fi tape, acoustic studio, drum
-machine, electronica/IDM, organic/world, heavy/industrial and pop/disco.
-Names in the Load Kit menu give the feel before loading.
+VIBE KITS
+---------
+Genre → variant submenus mirror the TRIAZ preset browser. Genres:
+Techno (Dark / Punchy / Classic 909 / 808 Sub / Industrial)
+House (Classic / Electronic / Deep / Disco)
+Drum & Bass (Dark / Liquid)
+Electronica (IDM / Ambient)
+Lo-Fi (Tape / Boom Bap)
+Pop & Disco (Pop / Disco)
+Rap (Trap 808 / Boom Bap)
+Acoustic (Studio / Live)
+World (Organic)
 
-Each kit covers kick, snare, clap, hi-hats, six pitched/panned toms,
-crash, ride and perc, with fixed world perc / cymbals / cowbell / foley
-filling out the GM range. Lower extras (notes 21-34) add Perc Glitch,
-Layer, Noise and Foley textures.
+Each voice (kick, snare, hats, etc.) has a keyword list. The full TRIAZ
+library is scored across every tag — highest match wins. Fixed voices and
+lower extras use the variant's default keywords so everything stays
+cohesive. No confirmation dialog unless voices fail to load.
 
 UPPER PITCH ZONES (notes 88-108)
 ---------------------------------
@@ -2210,11 +2567,15 @@ local function show_main_menu(track)
     add("#Import selected (0)")
   end
 
-  -- Load kit submenu
+  -- Load kit: genre → variant submenus
   open_sub("Load kit")
-  for i, k in ipairs(KITS) do
-    local idx = i
-    add(k.name, function() load_kit_flow(track, idx) end)
+  for gi, genre in ipairs(VIBE_GENRES) do
+    open_sub(genre.name)
+    for vi, variant in ipairs(genre.variants) do
+      local g, v = gi, vi
+      add(variant.name, function() load_vibe_kit_flow(track, g, v) end)
+    end
+    close_sub()
   end
   close_sub()
 
