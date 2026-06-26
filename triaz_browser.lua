@@ -5590,14 +5590,14 @@ local function meta_key(track, fx_idx)
 end
 
 local function save_meta(track, fx_idx, note, layer, drum_type, tag)
-  local val = string.format("note:%d|L%d|%s|%s", note, layer, drum_type, tag)
+  local val = string.format("note:%d|L%d|%s|%s", note, layer, drum_type or "Unknown", tag or "")
   reaper.SetProjExtState(0, "TRIAZ_BROWSER", meta_key(track, fx_idx), val)
 end
 
 local function load_meta(track, fx_idx)
   local ok, val = reaper.GetProjExtState(0, "TRIAZ_BROWSER", meta_key(track, fx_idx))
   if not ok or val == "" then return nil end
-  local note, layer, dtype, tag = val:match("^note:(%d+)|L(%d+)|(.+)|(.+)$")
+  local note, layer, dtype, tag = val:match("^note:(%d+)|L(%d+)|(.+)|(.*)$")
   if not note then return nil end
   return {note=tonumber(note), layer=tonumber(layer), drum_type=dtype, tag=tag}
 end
