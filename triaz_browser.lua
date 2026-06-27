@@ -152,19 +152,45 @@ end
 
 -- Prompt user to select a folder path — browse (JS_ReaScriptAPI) or type manually.
 -- Returns normalised path ending with \, or nil if cancelled.
+local function browse_folder_ps(initial)
+  initial = (initial or ""):gsub("\\+$", ""):gsub("'", "''")
+  local cmd = "powershell -WindowStyle Hidden -Command \""..
+    "Add-Type -AssemblyName System.Windows.Forms;"..
+    "$d=New-Object System.Windows.Forms.FolderBrowserDialog;"..
+    "$d.Description='" .. initial .. "';"..
+    "$d.SelectedPath='" .. initial .. "';"..
+    "$d.ShowNewFolderButton=$false;"..
+    "if($d.ShowDialog()-eq'OK'){Write-Output $d.SelectedPath}\""
+  local h = io.popen(cmd)
+  if not h then return nil end
+  local result = h:read("*l")
+  h:close()
+  return (result and result ~= "") and result or nil
+end
+
 local function pick_folder(caption, current)
   if reaper.JS_Dialog_BrowseForFolder then
     local res = reaper.MB(
       "Yes = browse for folder\nNo = type path manually",
       caption, 3)
-    if res == 2 then return nil end  -- Cancel
+    if res == 2 then return nil end
     if res == 6 then
       local retval, folder = reaper.JS_Dialog_BrowseForFolder(caption, current or "")
       if retval ~= 1 or not folder or folder == "" then return nil end
       return folder:gsub("[\\/]+$", "") .. "\\"
     end
+  else
+    local res = reaper.MB(
+      "Yes = browse for folder\nNo = type path manually",
+      caption, 3)
+    if res == 2 then return nil end
+    if res == 6 then
+      local folder = browse_folder_ps(current)
+      if not folder then return nil end
+      return folder:gsub("[\\/]+$", "") .. "\\"
+    end
   end
-  -- Type manually (fallback when JS_ReaScriptAPI unavailable, or user chose No)
+  -- Type manually
   local ok, fields = reaper.GetUserInputs(caption, 1, "Samples folder,extrawidth=400", current or "")
   if not ok or fields == "" then return nil end
   return fields:gsub("[\\/]+$", "") .. "\\"
