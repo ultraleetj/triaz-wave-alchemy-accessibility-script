@@ -150,16 +150,37 @@ local function save_cache()
   _cache_dirty = false
 end
 
+-- Prompt user to select a folder path — browse (JS_ReaScriptAPI) or type manually.
+-- Returns normalised path ending with \, or nil if cancelled.
+local function pick_folder(caption, current)
+  local res = reaper.MB(
+    "Yes = browse for folder\nNo = type path manually",
+    caption, 3)
+  if res == 2 then return nil end  -- Cancel
+  if res == 6 then
+    -- Browse via JS_ReaScriptAPI native folder dialog
+    if not reaper.JS_Dialog_BrowseForFolder then
+      reaper.MB("JS_ReaScriptAPI not available — type path manually.", "Error", 0)
+      return nil
+    end
+    local ok, folder = reaper.JS_Dialog_BrowseForFolder(caption, current or "")
+    if not ok or not folder or folder == "" then return nil end
+    return folder:gsub("[\\/]+$", "") .. "\\"
+  else
+    -- Type manually
+    local ok, fields = reaper.GetUserInputs(caption, 1, "Samples folder,extrawidth=400", current or "")
+    if not ok or fields == "" then return nil end
+    return fields:gsub("[\\/]+$", "") .. "\\"
+  end
+end
+
 local function build_cache()
   -- Confirm or correct library path before scanning
-  local ok, fields = reaper.GetUserInputs(
-    "TRIAZ Library Path", 1,
-    "Samples folder (edit if needed),extrawidth=400", TRIAZ_BASE)
-  if not ok or fields == "" then
+  local new_path = pick_folder("TRIAZ Library Path", TRIAZ_BASE)
+  if not new_path then
     reaper.MB("Cancelled — no cache built.", "TRIAZ Browser", 0)
     return false
   end
-  local new_path = fields:gsub("[\\/]+$", "") .. "\\"
   if new_path ~= TRIAZ_BASE then
     TRIAZ_BASE = new_path
     reaper.SetExtState("TRIAZ_BROWSER", "library_path", TRIAZ_BASE, true)
@@ -204,11 +225,8 @@ local function clear_cache()
 end
 
 local function change_library_path()
-  local ok, fields = reaper.GetUserInputs(
-    "TRIAZ Library Path", 1,
-    "Samples folder,extrawidth=400", TRIAZ_BASE)
-  if not ok or fields == "" then return end
-  local new_path = fields:gsub("[\\/]+$", "") .. "\\"
+  local new_path = pick_folder("TRIAZ Library Path", TRIAZ_BASE)
+  if not new_path then return end
   if new_path == TRIAZ_BASE then return end
   TRIAZ_BASE = new_path
   reaper.SetExtState("TRIAZ_BROWSER", "library_path", TRIAZ_BASE, true)
