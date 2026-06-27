@@ -163,8 +163,8 @@ local function pick_folder(caption, current)
       reaper.MB("JS_ReaScriptAPI not available — type path manually.", "Error", 0)
       return nil
     end
-    local ok, folder = reaper.JS_Dialog_BrowseForFolder(caption, current or "")
-    if not ok or not folder or folder == "" then return nil end
+    local retval, folder = reaper.JS_Dialog_BrowseForFolder(caption, current or "")
+    if retval ~= 1 or not folder or folder == "" then return nil end
     return folder:gsub("[\\/]+$", "") .. "\\"
   else
     -- Type manually
