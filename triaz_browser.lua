@@ -153,25 +153,21 @@ end
 -- Prompt user to select a folder path — browse (JS_ReaScriptAPI) or type manually.
 -- Returns normalised path ending with \, or nil if cancelled.
 local function pick_folder(caption, current)
-  local res = reaper.MB(
-    "Yes = browse for folder\nNo = type path manually",
-    caption, 3)
-  if res == 2 then return nil end  -- Cancel
-  if res == 6 then
-    -- Browse via JS_ReaScriptAPI native folder dialog
-    if not reaper.JS_Dialog_BrowseForFolder then
-      reaper.MB("JS_ReaScriptAPI not available — type path manually.", "Error", 0)
-      return nil
+  if reaper.JS_Dialog_BrowseForFolder then
+    local res = reaper.MB(
+      "Yes = browse for folder\nNo = type path manually",
+      caption, 3)
+    if res == 2 then return nil end  -- Cancel
+    if res == 6 then
+      local retval, folder = reaper.JS_Dialog_BrowseForFolder(caption, current or "")
+      if retval ~= 1 or not folder or folder == "" then return nil end
+      return folder:gsub("[\\/]+$", "") .. "\\"
     end
-    local retval, folder = reaper.JS_Dialog_BrowseForFolder(caption, current or "")
-    if retval ~= 1 or not folder or folder == "" then return nil end
-    return folder:gsub("[\\/]+$", "") .. "\\"
-  else
-    -- Type manually
-    local ok, fields = reaper.GetUserInputs(caption, 1, "Samples folder,extrawidth=400", current or "")
-    if not ok or fields == "" then return nil end
-    return fields:gsub("[\\/]+$", "") .. "\\"
   end
+  -- Type manually (fallback when JS_ReaScriptAPI unavailable, or user chose No)
+  local ok, fields = reaper.GetUserInputs(caption, 1, "Samples folder,extrawidth=400", current or "")
+  if not ok or fields == "" then return nil end
+  return fields:gsub("[\\/]+$", "") .. "\\"
 end
 
 local function build_cache()
