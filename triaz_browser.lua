@@ -95,8 +95,12 @@ local _cache_loaded = false
 do
   local ok, cached = pcall(dofile, CACHE_PATH)
   if ok and type(cached) == "table" then
-    _dir_cache    = cached
-    _cache_loaded = true
+    if cached._no_library then
+      _cache_loaded = true   -- user previously chose no-library mode
+    else
+      _dir_cache    = cached
+      _cache_loaded = true
+    end
   end
 end
 
@@ -5784,9 +5788,10 @@ end
 
 -- Show a gate dialog, then read the most recent MIDI note-on from input buffer.
 -- Returns note name string. Falls back to note_name(gm_note) if no note-on found.
-local function pick_note_default(gm_note)
+local function pick_note_default(gm_note, wav_name)
+  local body = wav_name and (wav_name .. "\n\n") or ""
   reaper.MB(
-    "Play a MIDI note now, then click OK.\nThe note you play will be pre-filled in the next dialog.",
+    body .. "Play a MIDI note now, then click OK.\nThe note you play will be pre-filled in the next dialog.",
     "Capture Note from Keyboard", 0
   )
   -- Scan recent events; idx 0 = most recent. Look for a note-on (vel > 0).
@@ -6091,7 +6096,7 @@ local function run_assign_dialog(track, wav_name, full_path, drum_type, tag, def
     "Max voices (0=unlimited  1-9)",
   }, ",")
 
-  local note_default = defs.note and note_name(defs.note) or pick_note_default(gm_note)
+  local note_default = defs.note and note_name(defs.note) or pick_note_default(gm_note, wav_name)
   local defaults_str = string.format("%s,%d,%d,%d,%d,%d,%d,%d,%.2f,%d",
     note_default,
     defs.layer      or 1,
@@ -6604,7 +6609,7 @@ local function quick_assign_flow(track)
   if not wav_name then return end
 
   local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
-  local note_default = pick_note_default(gm_note)
+  local note_default = pick_note_default(gm_note, wav_name)
   local ok, result = reaper.GetUserInputs(
     "Quick Assign: " .. wav_name, 2,
     "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
@@ -6705,24 +6710,13 @@ local function import_selected_items_flow(track)
     tag       = tag       or ""
 
     if sequential then
-      local assign_ok, fx_idx = assign_sample(track, current_note, seq_layer, drum_type, tag, wav_name, full_path, nil)
-      if assign_ok then
-        preview_wav(full_path)
-        local res = reaper.MB(
-          string.format("%s\nNote: %s  L%d\n\nYes = keep   No = skip   Cancel = stop",
-            wav_name, note_name(current_note), seq_layer),
-          string.format("Keep? (%d/%d)", idx, #items), 3
-        )
-        stop_preview()
-        if res == 2 then break end             -- Cancel = stop all
-        if res ~= 6 then remove_rs5k(track, fx_idx) end
-      end
+      assign_sample(track, current_note, seq_layer, drum_type, tag, wav_name, full_path, nil)
       current_note = current_note + 1
 
     else
       -- Manual: filename visible in dialog title; user enters note, then hears preview
       local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
-      local note_default = pick_note_default(gm_note)
+      local note_default = pick_note_default(gm_note, wav_name)
       local ok, result = reaper.GetUserInputs(
         string.format("Item %d/%d: %s", idx, #items, wav_name), 2,
         "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
@@ -7482,7 +7476,9 @@ local function main()
     if choice == 6 then
       build_cache()
     else
-      _cache_loaded = true  -- skip mode: don't ask again this session
+      local f = io.open(CACHE_PATH, "w")
+      if f then f:write("return {_no_library = true}\n"); f:close() end
+      _cache_loaded = true
     end
   end
 
