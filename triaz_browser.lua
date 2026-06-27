@@ -181,7 +181,7 @@ local function pick_folder(caption, current)
     end
   else
     local res = reaper.MB(
-      "Yes = browse for folder\nNo = type path manually",
+      "Yes = browse for folder\nNo = type path manually\n\n(A brief command window may flash when the folder browser opens — this is normal.)",
       caption, 3)
     if res == 2 then return nil end
     if res == 6 then
