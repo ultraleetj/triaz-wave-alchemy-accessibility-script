@@ -6669,50 +6669,90 @@ local function import_selected_items_flow(track)
     return
   end
 
-  reaper.MB(
-    string.format("%d audio item%s found.\nFor each: set note + layer, preview, keep or skip.",
-      #items, #items == 1 and "" or "s"),
-    "Import Selected Items", 0
-  )
+  -- For multiple items, choose sequential (chromatic) or manual (ask note each time)
+  local sequential = false
+  local seq_note, seq_layer
+  if #items > 1 then
+    local res = reaper.MB(
+      string.format("%d items found.\n\nYes = sequential from a start note (chromatic)\nNo = ask note for each item",
+        #items),
+      "Import Mode", 3
+    )
+    if res == 2 then return end   -- Cancel
+    sequential = (res == 6)       -- Yes = sequential
+  end
+
+  if sequential then
+    local ok, result = reaper.GetUserInputs(
+      string.format("Sequential import: %d items", #items), 2,
+      "Start note (e.g. C2),Layer (1-3)",
+      "C2,1"
+    )
+    if not ok then return end
+    local sn, sl = parse_note_layer(result)
+    if not sn then reaper.MB("Invalid note.", "Error", 0); return end
+    seq_note, seq_layer = sn, sl
+  end
+
+  local current_note = seq_note
 
   for idx, full_path in ipairs(items) do
-    stop_preview()  -- ensure previous item's audio is dead before next dialog
+    stop_preview()
 
     local wav_name = full_path:match("[^\\/]+$") or full_path
     local drum_type, tag = parse_triaz_path(full_path)
     drum_type = drum_type or "Unknown"
     tag       = tag       or ""
 
-    local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
-    local note_default = pick_note_default(gm_note)
-    local ok, result = reaper.GetUserInputs(
-      string.format("Item %d/%d: %s", idx, #items, wav_name), 2,
-      "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
-      note_default .. ",1"
-    )
-    if not ok then break end
+    if sequential then
+      local assign_ok, fx_idx = assign_sample(track, current_note, seq_layer, drum_type, tag, wav_name, full_path, nil)
+      if assign_ok then
+        preview_wav(full_path)
+        local res = reaper.MB(
+          string.format("%s\nNote: %s  L%d\n\nYes = keep   No = skip   Cancel = stop",
+            wav_name, note_name(current_note), seq_layer),
+          string.format("Keep? (%d/%d)", idx, #items), 3
+        )
+        stop_preview()
+        if res == 2 then break end             -- Cancel = stop all
+        if res ~= 6 then remove_rs5k(track, fx_idx) end
+      end
+      current_note = current_note + 1
 
-    local note, layer = parse_note_layer(result)
-    if not note then
-      reaper.MB("Invalid note — skipping this item.", "Error", 0)
-      goto continue
+    else
+      -- Manual: filename visible in dialog title; user enters note, then hears preview
+      local gm_note = (GM_SUGGESTIONS[drum_type] or {36})[1]
+      local note_default = pick_note_default(gm_note)
+      local ok, result = reaper.GetUserInputs(
+        string.format("Item %d/%d: %s", idx, #items, wav_name), 2,
+        "Note (e.g. C2  D#4; suggested=" .. note_name(gm_note) .. "),Layer (1-3)",
+        note_default .. ",1"
+      )
+      if not ok then break end
+
+      local note, layer = parse_note_layer(result)
+      if not note then
+        reaper.MB("Invalid note — skipping this item.", "Error", 0)
+        goto continue
+      end
+
+      local assign_ok, fx_idx = assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, nil)
+      if not assign_ok then goto continue end
+
+      preview_wav(full_path)
+      local res = reaper.MB(
+        string.format("%s\nNote: %s  L%d\n\nYes = keep   No = skip",
+          wav_name, note_name(note), layer),
+        string.format("Keep? (%d/%d)", idx, #items), 4
+      )
+      stop_preview()
+      if res ~= 6 then remove_rs5k(track, fx_idx) end
     end
-
-    local assign_ok, fx_idx = assign_sample(track, note, layer, drum_type, tag, wav_name, full_path, nil)
-    if not assign_ok then goto continue end
-
-    preview_wav(full_path)
-    local res = reaper.MB(
-      string.format("%s\nNote: %s  L%d\n\nYes = keep   No = skip",
-        wav_name, note_name(note), layer),
-      string.format("Keep? (%d/%d)", idx, #items), 4
-    )
-    stop_preview()
-
-    if res ~= 6 then remove_rs5k(track, fx_idx) end
 
     ::continue::
   end
+
+  stop_preview()
 end
 
 -- ── Cycle samples ────────────────────────────────────────────────────────────
