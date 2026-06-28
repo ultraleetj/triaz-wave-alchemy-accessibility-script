@@ -3,8 +3,7 @@
 -- Accessible via screen reader (native REAPER dialogs only)
 
 local _default_triaz_base = "X:\\samplers\\TRIAZ\\Samples\\TRIAZ - Factory Collection\\"
-local _stored_path        = reaper.GetExtState("TRIAZ_BROWSER", "library_path")
-local TRIAZ_BASE          = (_stored_path ~= "") and _stored_path or _default_triaz_base
+local TRIAZ_BASE          = _default_triaz_base   -- overridden below once cache loads
 local CACHE_PATH          = reaper.GetResourcePath() .. "\\Scripts\\triaz_browser_cache.lua"
 
 
@@ -96,6 +95,9 @@ local _cache_loaded = false
 do
   local ok, cached = pcall(dofile, CACHE_PATH)
   if ok and type(cached) == "table" then
+    if cached._library_path and cached._library_path ~= "" then
+      TRIAZ_BASE = cached._library_path
+    end
     if cached._no_library then
       _no_library   = true
       _cache_loaded = true   -- user previously chose no-library mode
@@ -139,6 +141,7 @@ local function save_cache()
   local f = io.open(CACHE_PATH, "w")
   if not f then return end
   f:write("return {\n")
+  f:write(string.format("  _library_path = %q,\n", TRIAZ_BASE))
   for k, v in pairs(_dir_cache) do
     f:write(string.format("  [%q] = {", k))
     for i, s in ipairs(v) do
@@ -206,9 +209,9 @@ local function build_cache()
     return false
   end
   if new_path ~= TRIAZ_BASE then
-    TRIAZ_BASE = new_path
-    reaper.SetExtState("TRIAZ_BROWSER", "library_path", TRIAZ_BASE, true)
-    _dir_cache = {}
+    TRIAZ_BASE    = new_path
+    _dir_cache    = {}
+    _cache_dirty  = true
   end
 
   local confirm = reaper.MB(
@@ -253,8 +256,7 @@ local function change_library_path()
   local new_path = pick_folder("TRIAZ Library Path", TRIAZ_BASE)
   if not new_path then return end
   if new_path == TRIAZ_BASE then return end
-  TRIAZ_BASE = new_path
-  reaper.SetExtState("TRIAZ_BROWSER", "library_path", TRIAZ_BASE, true)
+  TRIAZ_BASE   = new_path
   _dir_cache   = {}
   _cache_dirty = false
   os.remove(CACHE_PATH)
