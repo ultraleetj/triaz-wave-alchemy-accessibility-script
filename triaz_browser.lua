@@ -87,8 +87,9 @@ end
 
 -- ── File system helpers ──────────────────────────────────────────────────────
 
-local _cache_dirty = false
-local _dir_cache   = {}
+local _cache_dirty  = false
+local _dir_cache    = {}
+local _no_library   = false   -- true when user chose "No" at TRIAZ installed prompt
 
 -- Load persistent cache from disk (survives REAPER restart)
 local _cache_loaded = false
@@ -96,6 +97,7 @@ do
   local ok, cached = pcall(dofile, CACHE_PATH)
   if ok and type(cached) == "table" then
     if cached._no_library then
+      _no_library   = true
       _cache_loaded = true   -- user previously chose no-library mode
     else
       _dir_cache    = cached
@@ -7529,19 +7531,23 @@ local function show_main_menu(track)
     add("#Import selected (0)")
   end
 
-  -- Load kit: genre → variant submenus
-  open_sub("Load kit")
-  for gi, genre in ipairs(VIBE_GENRES) do
-    open_sub(genre.name)
-    for vi, variant in ipairs(genre.variants) do
-      local g, v = gi, vi
-      local is_loaded = _loaded_kit and _loaded_kit[1] == gi and _loaded_kit[2] == vi
-      local label = is_loaded and ("!" .. variant.name) or variant.name
-      add(label, function() load_vibe_kit_flow(track, g, v) end)
+  -- Load kit: genre → variant submenus (disabled when no library)
+  if _no_library then
+    add("#Load kit (library not available)")
+  else
+    open_sub("Load kit")
+    for gi, genre in ipairs(VIBE_GENRES) do
+      open_sub(genre.name)
+      for vi, variant in ipairs(genre.variants) do
+        local g, v = gi, vi
+        local is_loaded = _loaded_kit and _loaded_kit[1] == gi and _loaded_kit[2] == vi
+        local label = is_loaded and ("!" .. variant.name) or variant.name
+        add(label, function() load_vibe_kit_flow(track, g, v) end)
+      end
+      close_sub()
     end
     close_sub()
   end
-  close_sub()
 
   -- Tweak submenu: each instance expands to its 6 actions
   if inst_count > 0 then
@@ -7565,7 +7571,11 @@ local function show_main_menu(track)
     add("#Tweak (0 instances)")
   end
 
-  add("Randomize",             function() randomize_flow(track) end)
+  if _no_library then
+    add("#Randomize (library not available)")
+  else
+    add("Randomize",           function() randomize_flow(track) end)
+  end
   add("Export samples",        function() export_samples_flow(track) end)
   add("Refresh library cache", function() clear_cache() end)
   add("Change library path",   function() change_library_path() end)
@@ -7606,6 +7616,7 @@ local function main()
       else
         local f = io.open(CACHE_PATH, "w")
         if f then f:write("return {_no_library = true}\n"); f:close() end
+        _no_library   = true
         _cache_loaded = true
         done = true
       end
