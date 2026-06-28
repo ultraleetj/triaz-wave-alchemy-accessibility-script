@@ -5547,6 +5547,8 @@ local KIT_FIXED_VOICES = {
   {notes={75},    type="Perc Acoustic",   tag="Sticks & Clicks"},
   {notes={76,77}, type="Perc Acoustic",   tag="Blocks & Bells"},
   {notes={82},    type="Shakers",         tag="Organic"},
+  {notes={80,81}, type="Perc Acoustic",   tag="Metallic"},
+  {notes={85},    type="Perc Acoustic",   tag="Sticks & Clicks"},
   {notes={86,87}, type="Tom",             tag="Deep"},
 }
 
@@ -5561,7 +5563,7 @@ local KIT_LOWER_VOICES = {
   {notes={27}, type="Layer",       tag="Bright"},
   {notes={28}, type="Layer",       tag="Creative"},
   {notes={29}, type="Layer",       tag="Noise"},
-  {notes={30}, type="Layer",       tag="Snap"},
+  {notes={30}, type="Perc Acoustic", tag="Sticks & Clicks"},
   {notes={31}, type="Noise",       tag=""},
   {notes={32}, type="Foley",       tag="Blips & Pops"},
   {notes={33}, type="Foley",       tag="Metallic"},
