@@ -209,13 +209,14 @@ local function build_cache()
     _dir_cache = {}
   end
 
-  reaper.MB(
+  local confirm = reaper.MB(
     "Scanning " .. #DRUM_TYPES .. " drum types across:\n" ..
     TRIAZ_BASE .. "\n\n" ..
     "This can take up to a minute. The window will appear frozen /\n" ..
     "unresponsive while it scans — this is expected. Wait for it to\n" ..
-    "finish. Click OK to start.",
-    "TRIAZ Browser — Building Cache", 0)
+    "finish.\n\nOK = start scan    Cancel = go back",
+    "TRIAZ Browser — Building Cache", 1)
+  if confirm ~= 1 then return false end
 
   local total_wavs, total_tags = 0, 0
   for _, drum_type in ipairs(DRUM_TYPES) do
@@ -7395,6 +7396,88 @@ Menu out of date / samples missing after moving the library
   end
 end
 
+-- ── Export samples ───────────────────────────────────────────────────────────
+
+local function copy_file(src, dst)
+  local f = io.open(src, "rb")
+  if not f then return false, "cannot open: " .. src end
+  local data = f:read("*a")
+  f:close()
+  local g = io.open(dst, "wb")
+  if not g then return false, "cannot write: " .. dst end
+  g:write(data)
+  g:close()
+  return true
+end
+
+local function export_samples_flow(track)
+  local instances = scan_triaz_instances(track)
+  local exportable = {}
+  for _, inst in ipairs(instances) do
+    if inst.info.drum_type ~= "Zone" then
+      local ok_f, file = reaper.TrackFX_GetNamedConfigParm(track, inst.fx_idx, "FILE0")
+      if ok_f and file and file ~= "" then
+        exportable[#exportable + 1] = {inst = inst, file = file}
+      end
+    end
+  end
+
+  if #exportable == 0 then
+    reaper.MB("No samples loaded on this track (or all are Zone instances).",
+      "Export Samples", 0)
+    return
+  end
+
+  local proj_path = reaper.GetProjectPath(0)
+  if proj_path == "" then proj_path = reaper.GetResourcePath() end
+  local default_dest = proj_path .. "\\triaz_exports"
+
+  local dest = pick_folder("Export samples — choose destination folder", default_dest)
+  if not dest then return end
+
+  -- Ensure destination folder exists
+  os.execute('mkdir "' .. dest:gsub("[\\/]+$", "") .. '" 2>nul')
+
+  local ok_count, skip_count, err_count = 0, 0, 0
+  local err_lines    = {}
+  local seen_sources = {}   -- dedup: same WAV assigned to multiple notes → copy once
+
+  for _, entry in ipairs(exportable) do
+    local info     = entry.inst.info
+    local file     = entry.file
+
+    if seen_sources[file] then
+      skip_count = skip_count + 1
+    else
+      seen_sources[file] = true
+      local basename = file:match("[^\\/]+$") or file
+      -- Sanitise drum_type and tag: keep alphanumeric and hyphens, replace rest with _
+      local safe_type = info.drum_type:gsub("[^%w%-]", "_")
+      local safe_tag  = info.tag:gsub("[^%w%-]", "_")
+      local tag_part  = (safe_tag ~= "") and ("_" .. safe_tag) or ""
+      local dest_name = string.format("%03d_%s_%s%s_%s",
+        info.note, note_name(info.note), safe_type, tag_part, basename)
+      local dest_path = dest .. dest_name
+
+      local success, err = copy_file(file, dest_path)
+      if success then
+        ok_count = ok_count + 1
+      else
+        err_count = err_count + 1
+        err_lines[#err_lines + 1] = dest_name .. ": " .. (err or "?")
+      end
+    end
+  end
+
+  local msg = string.format(
+    "Export complete.\n\nCopied:   %d\nSkipped:  %d (duplicate source)\nErrors:   %d\n\nFolder:\n%s",
+    ok_count, skip_count, err_count, dest)
+  if #err_lines > 0 then
+    msg = msg .. "\n\nErrors:\n" .. table.concat(err_lines, "\n")
+  end
+  reaper.MB(msg, "Export Samples", 0)
+end
+
 -- ── Main menu (structured with submenus) ─────────────────────────────────────
 
 -- Builds menu string + parallel action list, shows it, runs chosen action.
@@ -7483,6 +7566,7 @@ local function show_main_menu(track)
   end
 
   add("Randomize",             function() randomize_flow(track) end)
+  add("Export samples",        function() export_samples_flow(track) end)
   add("Refresh library cache", function() clear_cache() end)
   add("Change library path",   function() change_library_path() end)
   add("Help",                  function() show_help() end)
@@ -7507,18 +7591,24 @@ local function main()
   reaper.Undo_BeginBlock()
 
   if not _cache_loaded then
-    local choice = reaper.MB(
-      "No TRIAZ library cache found.\n\n" ..
-      "Do you have the Wave Alchemy TRIAZ library installed?\n\n" ..
-      "Yes  =  scan library and build cache (takes ~1 minute)\n" ..
-      "No   =  skip scan and use RS5k manager features only",
-      "TRIAZ Browser", 4)
-    if choice == 6 then
-      build_cache()
-    else
-      local f = io.open(CACHE_PATH, "w")
-      if f then f:write("return {_no_library = true}\n"); f:close() end
-      _cache_loaded = true
+    local done = false
+    while not done do
+      local choice = reaper.MB(
+        "No TRIAZ library cache found.\n\n" ..
+        "Do you have the Wave Alchemy TRIAZ library installed?\n\n" ..
+        "Yes  =  scan library and build cache (takes ~1 minute)\n" ..
+        "No   =  skip scan and use RS5k manager features only",
+        "TRIAZ Browser", 4)
+      if choice == 6 then
+        -- build_cache returns false if cancelled at folder picker or confirm step
+        -- → loop back to this dialog so user can retry or choose No
+        if build_cache() then done = true end
+      else
+        local f = io.open(CACHE_PATH, "w")
+        if f then f:write("return {_no_library = true}\n"); f:close() end
+        _cache_loaded = true
+        done = true
+      end
     end
   end
 
