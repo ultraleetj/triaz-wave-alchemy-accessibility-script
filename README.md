@@ -67,18 +67,6 @@ The TRIAZ-specific features (genre kits, Drum Type/Tag browser, library cache) r
 
 Everything runs through native REAPER message boxes, input dialogs, and context menus, all reachable with arrow keys and Tab, and announced by your screen reader. No GFX canvas UI is used for interaction.
 
-## Changelog
-
-### 2026-06-27
-
-- **Export samples** (new) -- menu item copies all loaded WAVs to a chosen folder, prefixed with MIDI note number and name for DAW portability.
-- **Sequential chromatic import** (new) -- import a batch of files one by one, each assigned to a played MIDI note with preview between steps.
-- **Folder browser dialogs** -- all path-picking dialogs now offer a native GUI folder browser. Uses js_ReaScriptAPI if installed, falls back to a PowerShell dialog otherwise. A brief command window may flash during the fallback -- this is normal.
-- **Cache build flow** -- the scan confirm dialog now has a Cancel button. Cancelling either the folder picker or the confirm step returns to the initial "installed?" question instead of aborting the script.
-- **No-library mode** -- Load kit and Randomize menu items are now greyed out (disabled) when the script is running without a library scan, instead of being silently absent.
-- **Bug fix** -- custom samples assigned via Add / assign sample were not appearing in Tweak until the menu was re-opened. Fixed.
-- **Internal** -- library path is stored in the cache file instead of `reaper.ini`.
-
 ## Contributing
 
 Bug reports, feature suggestions, and pull requests are welcome. Open an issue on GitHub if something is not working or you have an idea for improvement.
